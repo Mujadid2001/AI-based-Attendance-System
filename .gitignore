@@ -1,0 +1,145 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+/media
+/staticfiles
+/static/admin
+/static/rest_framework
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# OS
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE Settings
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node modules (if using npm packages)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+~*
+
+# Logs directory
+logs/
+*.log
+
+# Database backups
+*.sql
+*.sqlite3-backup
+
+# Migrations (optional - uncomment if you want to track migrations)
+# */migrations/*.py
+
+# Compiled files
+*.pyc
+*.pyo
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# IDE specific
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

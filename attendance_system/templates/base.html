@@ -1,0 +1,104 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Attendance System{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="/">
+                <i class="fas fa-camera"></i> Attendance System
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    {% if user.is_authenticated %}
+                        <li class="nav-item">
+                            <span class="nav-link text-light">{{ user.get_full_name|default:user.email }}</span>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/api/auth/authentication/logout/" data-bs-toggle="modal" data-bs-target="#logoutModal">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </a>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="/api/auth/authentication/login/">Login</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    {% if messages %}
+        <div class="container-fluid mt-5 pt-3">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-dark text-light text-center py-4 mt-5">
+        <p>&copy; 2025 AI-Based Attendance System. All rights reserved.</p>
+    </footer>
+
+    <!-- Logout Modal -->
+    <div class="modal fade" id="logoutModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Logout</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to logout?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <a href="/api/auth/authentication/logout/" class="btn btn-danger">Logout</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inactivity Modal -->
+    <div class="modal fade" id="inactivityModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">Session Timeout Warning</h5>
+                </div>
+                <div class="modal-body">
+                    <p>Your session will expire due to inactivity. Would you like to continue?</p>
+                </div>
+                <div class="modal-footer">
+                    <a href="/api/auth/authentication/logout/" class="btn btn-danger">Logout</a>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Continue</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <script src="{% static 'js/main.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

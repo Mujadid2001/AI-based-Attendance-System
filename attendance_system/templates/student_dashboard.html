@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Student Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-user-graduate"></i> Student Dashboard
+            </h1>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="stat-card border-start-info">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Enrolled Courses</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card border-start-success">
+                <div class="stat-value">0%</div>
+                <div class="stat-label">Attendance Rate</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card border-start-warning">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Present Days</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card border-start-primary">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Absent Days</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- My Courses -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-book"></i> My Courses
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Course Name</th>
+                                    <th>Instructor</th>
+                                    <th>Attendance</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">
+                                        <i class="fas fa-inbox"></i> No courses enrolled
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-bolt"></i> Quick Actions
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="#" class="btn btn-outline-primary">
+                            <i class="fas fa-camera"></i> Register Face
+                        </a>
+                        <a href="#" class="btn btn-outline-primary">
+                            <i class="fas fa-history"></i> View History
+                        </a>
+                        <a href="#" class="btn btn-outline-primary">
+                            <i class="fas fa-download"></i> Download Report
+                        </a>
+                        <a href="#" class="btn btn-outline-primary">
+                            <i class="fas fa-user"></i> Update Profile
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Attendance Summary -->
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-chart-pie"></i> Attendance Summary
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <small>Present</small>
+                            <small class="fw-bold">0</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-success" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <small>Late</small>
+                            <small class="fw-bold">0</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-warning" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-2">
+                            <small>Absent</small>
+                            <small class="fw-bold">0</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-danger" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance History -->
+    <div class="row g-4 mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-history"></i> Attendance History
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Course</th>
+                                    <th>Status</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">
+                                        <i class="fas fa-inbox"></i> No attendance records
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .stat-card {
+        background: white;
+        border-radius: 12px;
+        padding: 25px;
+        border-left: 4px solid;
+        transition: all 0.3s ease;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    }
+
+    .stat-card .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #667eea;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        color: #9ca3af;
+        margin-top: 10px;
+    }
+
+    .border-start-info {
+        border-color: #3b82f6 !important;
+    }
+
+    .border-start-success {
+        border-color: #10b981 !important;
+    }
+
+    .border-start-warning {
+        border-color: #f59e0b !important;
+    }
+
+    .border-start-primary {
+        border-color: #667eea !important;
+    }
+</style>
+{% endblock %}
