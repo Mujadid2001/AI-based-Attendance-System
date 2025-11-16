@@ -43,14 +43,13 @@ class StudentProfileAdmin(admin.ModelAdmin):
                   'department', 'registration_date')
     search_fields = ('roll_number', 'user__email', 'user__first_name',
                     'user__last_name')
-    readonly_fields = ('created_at', 'updated_at', 'face_encoding_updated_at')
+    readonly_fields = ('created_at', 'updated_at', 'face_encoding_updated_at', 'registration_date')
     fieldsets = (
         ('User Information', {
             'fields': ('user',)
         }),
         ('Student Details', {
-            'fields': ('roll_number', 'department', 'semester',
-                      'registration_date')
+            'fields': ('roll_number', 'department', 'semester')
         }),
         ('Face Recognition', {
             'fields': ('is_face_registered', 'face_encoding_updated_at'),

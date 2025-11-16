@@ -10,6 +10,7 @@ from django.views.generic import TemplateView
 urlpatterns = [
     # Home
     path('', TemplateView.as_view(template_name='index.html'), name='home'),
+    path('register/', TemplateView.as_view(template_name='student_registration.html'), name='student_registration'),
     path('admin-dashboard/', TemplateView.as_view(template_name='admin_dashboard.html'), name='admin_dashboard'),
     path('teacher-dashboard/', TemplateView.as_view(template_name='teacher_dashboard.html'), name='teacher_dashboard'),
     path('student-dashboard/', TemplateView.as_view(template_name='student_dashboard.html'), name='student_dashboard'),
