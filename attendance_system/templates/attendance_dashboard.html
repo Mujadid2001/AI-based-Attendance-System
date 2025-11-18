@@ -11,6 +11,11 @@
                 <i class="fas fa-camera"></i> Real-Time Attendance
             </h1>
         </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-danger" onclick="handleLogout()">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </div>
     </div>
 
     <div class="row g-4">
@@ -95,6 +100,7 @@
         height: 100%;
     }
 </style>
+{% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
