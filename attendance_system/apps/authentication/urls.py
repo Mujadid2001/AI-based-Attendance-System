@@ -11,4 +11,5 @@ router.register(r'users', UserManagementViewSet, basename='user')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('register_student_with_face/', AuthenticationViewSet.as_view({'post': 'register_student_with_face'}), name='register_student_with_face'),
 ]
