@@ -448,35 +448,71 @@
         }
     }
     
-    function proceedToConfirmation() {
-        // Save form data temporarily (in real app, would save to backend)
-        const formData = {
-            firstName: document.getElementById('firstName').value,
-            lastName: document.getElementById('lastName').value,
-            email: document.getElementById('email').value,
-            rollNumber: document.getElementById('rollNumber').value,
-            department: document.getElementById('department').value,
-            semester: document.getElementById('semester').value,
-            password: document.getElementById('password').value,
-            faceCaptures: capturedFaces
-        };
-        
-        // Store in session for backend registration
-        sessionStorage.setItem('registrationData', JSON.stringify({
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            rollNumber: formData.rollNumber,
-            department: formData.department,
-            semester: formData.semester,
-            password: formData.password,
-            faceCount: formData.faceCaptures.length
-        }));
-        
-        // Update confirmation page
-        document.getElementById('confirmEmail').textContent = formData.email;
-        
-        goToStep(3);
+    // Helper function to convert data URL to Blob
+    function dataURLtoBlob(dataurl) {
+        var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+            bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+        while(n--){
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+        return new Blob([u8arr], {type:mime});
+    }
+
+    async function proceedToConfirmation() {
+        if (capturedFaces.length < 1) {
+            showError('faceError', 'Please capture at least one face image.');
+            return;
+        }
+
+        // Create FormData
+        const formData = new FormData();
+        formData.append('first_name', document.getElementById('firstName').value);
+        formData.append('last_name', document.getElementById('lastName').value);
+        formData.append('email', document.getElementById('email').value);
+        formData.append('roll_number', document.getElementById('rollNumber').value);
+        formData.append('department', document.getElementById('department').value);
+        formData.append('semester', document.getElementById('semester').value);
+        formData.append('password', document.getElementById('password').value);
+
+        // Append face image - sending only the first one for registration
+        const faceBlob = dataURLtoBlob(capturedFaces[0]);
+        formData.append('face_image', faceBlob, 'face_image.jpg');
+
+        // Display loading state
+        const proceedBtn = document.getElementById('proceedStep3Btn');
+        const originalBtnText = proceedBtn.innerHTML;
+        proceedBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registering...';
+        proceedBtn.disabled = true;
+
+        try {
+            // Using the correct API endpoint
+            const response = await fetch('/api/auth/authentication/register_student_with_face/', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                // Update confirmation page
+                document.getElementById('confirmEmail').textContent = result.user.email;
+                goToStep(3);
+            } else {
+                // Handle server-side errors
+                let errorMessage = result.error || 'An unknown error occurred.';
+                if (typeof result === 'object' && result !== null) {
+                    errorMessage = Object.entries(result).map(([key, value]) => `<strong>${key}:</strong> ${Array.isArray(value) ? value.join(', ') : value}`).join('<br>');
+                }
+                showError('faceError', `Registration Failed:<br>${errorMessage}`);
+            }
+        } catch (error) {
+            console.error('Registration request failed:', error);
+            showError('faceError', 'Registration request failed. Please check your network connection.');
+        } finally {
+            // Restore button state
+            proceedBtn.innerHTML = originalBtnText;
+            proceedBtn.disabled = false;
+        }
     }
     
     function goToStep(step) {

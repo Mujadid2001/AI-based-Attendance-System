@@ -18,6 +18,7 @@ urlpatterns = [
     # Face Recognition & Attendance
     path('face-registration/', TemplateView.as_view(template_name='face_registration.html'), name='face_registration'),
     path('attendance-marking/', TemplateView.as_view(template_name='attendance_marking.html'), name='attendance_marking'),
+    path('attendance-dashboard/', TemplateView.as_view(template_name='attendance_dashboard.html'), name='attendance_dashboard'),
     
     # Admin
     path('admin/', admin.site.urls),

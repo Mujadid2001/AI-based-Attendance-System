@@ -120,24 +120,31 @@ class ImageProcessor:
     """Utility class for image processing."""
     
     @staticmethod
-    def pil_to_cv2(pil_image):
+    def convert_pil_to_cv2(pil_image):
         """Convert PIL image to OpenCV format."""
         if not HAS_CV2 or Image is None:
             return None
         
         import numpy as np
-        cv2_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-        return cv2_image
+        return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
     
     @staticmethod
-    def cv2_to_pil(cv2_image):
+    def convert_cv2_to_pil(cv2_image):
         """Convert OpenCV image to PIL format."""
         if not HAS_CV2 or Image is None:
             return None
         
-        import cv2
-        pil_image = Image.fromarray(cv2.cvtColor(cv2_image, cv2.COLOR_BGR2RGB))
-        return pil_image
+        return Image.fromarray(cv2.cvtColor(cv2_image, cv2.COLOR_BGR2RGB))
+
+    @staticmethod
+    def convert_image_bytes_to_cv2(image_bytes):
+        """Convert image bytes to cv2 image."""
+        if not HAS_CV2 or not HAS_NUMPY:
+            return None
+
+        image_stream = BytesIO(image_bytes)
+        image_array = np.asarray(bytearray(image_stream.read()), dtype=np.uint8)
+        return cv2.imdecode(image_array, cv2.IMREAD_COLOR)
 
 
 class FacialRecognitionPipeline:
@@ -195,9 +202,15 @@ class FacialRecognitionPipeline:
             if encoding is None:
                 return None, 0.0
             
-            # Return first match (simplified)
-            if known_ids:
-                return known_ids[0], 0.95
+            matches = face_recognition.compare_faces(known_encodings, encoding)
+            face_distances = face_recognition.face_distance(known_encodings, encoding)
+
+            best_match_index = np.argmin(face_distances)
+            if matches[best_match_index]:
+                confidence = 1 - face_distances[best_match_index]
+                if confidence >= confidence_threshold:
+                    return known_ids[best_match_index], confidence
+
         except Exception as e:
             logger.error(f"Error recognizing face: {e}")
         

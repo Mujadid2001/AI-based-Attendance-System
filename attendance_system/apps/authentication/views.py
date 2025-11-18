@@ -34,6 +34,37 @@ class AuthenticationViewSet(viewsets.ViewSet):
         return ip
     
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def register_student_with_face(self, request):
+        """Register new student with face capture."""
+        serializer = UserRegistrationSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+
+            # Create student profile
+            student_profile = StudentProfile.objects.create(
+                user=user,
+                roll_number=request.data.get('roll_number'),
+                department=request.data.get('department'),
+                semester=request.data.get('semester')
+            )
+
+            # Save face image
+            face_image = request.FILES.get('face_image')
+            if face_image:
+                ai_manager = get_ai_manager()
+                ai_manager.register_student_face(face_image, student_profile)
+
+            logger.info(f"New student registered: {user.email}")
+            return Response(
+                {
+                    'message': _('Registration successful. Please log in.'),
+                    'user': UserSerializer(user).data
+                },
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
         """Register new user."""
         serializer = UserRegistrationSerializer(data=request.data)

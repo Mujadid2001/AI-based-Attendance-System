@@ -123,47 +123,26 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def mark_attendance(self, request):
         """Mark attendance for students."""
+        from .services import mark_attendance
         session_id = request.data.get('session')
         student_id = request.data.get('student')
         status_val = request.data.get('status', Attendance.Status.PRESENT)
         confidence = request.data.get('confidence_score')
         liveness = request.data.get('liveness_verified', False)
-        
-        try:
-            session = AttendanceSession.objects.get(id=session_id)
-            student = StudentProfile.objects.get(id=student_id)
-        except (AttendanceSession.DoesNotExist, StudentProfile.DoesNotExist):
+
+        attendance, created = mark_attendance(
+            session_id, student_id, status_val, confidence, liveness, request.user
+        )
+
+        if attendance:
+            logger.info(f"Attendance marked: {attendance}")
+            serializer = AttendanceSerializer(attendance)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
             return Response(
                 {'error': _('Invalid session or student.')},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # Check if already marked
-        existing = Attendance.objects.filter(
-            session=session,
-            student=student
-        ).first()
-        
-        if existing:
-            return Response(
-                {'error': _('Attendance already marked for this student.')},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        attendance = Attendance.objects.create(
-            session=session,
-            student=student,
-            status=status_val,
-            check_in_time=timezone.now().time(),
-            check_in_method='face_recognition',
-            confidence_score=confidence,
-            liveness_verified=liveness,
-            recorded_by=request.user
-        )
-        
-        logger.info(f"Attendance marked: {attendance}")
-        serializer = AttendanceSerializer(attendance)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['put'])
     def update_status(self, request, pk=None):
@@ -416,6 +395,29 @@ def mark_attendance_by_face(request):
     except AttendanceSession.DoesNotExist:
         return Response(
             {'detail': 'Session not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        logger.error(f"Error marking attendance by face: {str(e)}")
+        return Response(
+            {'detail': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminOrTeacher])
+def get_active_session(request):
+    """Get the currently active attendance session for the logged-in teacher."""
+    try:
+        session = AttendanceSession.objects.get(
+            course__instructor=request.user,
+            is_active=True
+        )
+        serializer = AttendanceSessionSerializer(session)
+        return Response(serializer.data)
+    except AttendanceSession.DoesNotExist:
+        return Response(
+            {'detail': 'No active session found.'},
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
