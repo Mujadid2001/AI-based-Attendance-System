@@ -14,6 +14,8 @@ from apps.authentication.serializers import (
 )
 from apps.authentication.models import LoginLog
 from apps.authentication.permissions import IsAdmin
+from apps.student.models import StudentProfile
+from apps.ai_core.services import get_ai_manager
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -46,6 +48,98 @@ class AuthenticationViewSet(viewsets.ViewSet):
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def register_student_with_face(self, request):
+        """Register new student with face capture."""
+        # Extract form data
+        user_data = {
+            'email': request.data.get('email'),
+            'password': request.data.get('password'),
+            'first_name': request.data.get('first_name'),
+            'last_name': request.data.get('last_name'),
+        }
+        
+        # Extract student profile data
+        student_data = {
+            'roll_number': request.data.get('roll_number'),
+            'department': request.data.get('department'),
+            'semester': request.data.get('semester'),
+        }
+        
+        # Get face image
+        face_image = request.FILES.get('face_image')
+        
+        if not face_image:
+            return Response(
+                {'error': _('Face image is required for registration.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate user data
+        user_serializer = UserRegistrationSerializer(data=user_data)
+        if not user_serializer.is_valid():
+            return Response(user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Create user account
+            user = user_serializer.save()
+            user.user_role = 'student'
+            user.save()
+            
+            # Create student profile
+            student = StudentProfile.objects.create(
+                user=user,
+                roll_number=student_data['roll_number'],
+                department=student_data['department'],
+                semester=int(student_data['semester'])
+            )
+            
+            # Register face
+            ai_manager = get_ai_manager()
+            face_result = ai_manager.register_student_face(face_image, student)
+            
+            if not face_result['success']:
+                # Delete created user and student if face registration fails
+                student.delete()
+                user.delete()
+                return Response(
+                    {'error': f'Face registration failed: {face_result["message"]}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            logger.info(f"Student registered with face: {user.email} - {student.roll_number}")
+            
+            return Response(
+                {
+                    'message': _('Registration successful! Your face has been registered for attendance.'),
+                    'user': UserSerializer(user).data,
+                    'student': {
+                        'id': student.id,
+                        'roll_number': student.roll_number,
+                        'department': student.department,
+                        'semester': student.semester,
+                        'is_face_registered': student.is_face_registered
+                    }
+                },
+                status=status.HTTP_201_CREATED
+            )
+            
+        except Exception as e:
+            logger.error(f"Registration error: {e}")
+            # Cleanup if anything goes wrong
+            try:
+                if 'student' in locals():
+                    student.delete()
+                if 'user' in locals():
+                    user.delete()
+            except:
+                pass
+            
+            return Response(
+                {'error': _('Registration failed. Please try again.')},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def login(self, request):
