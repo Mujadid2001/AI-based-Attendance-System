@@ -32,11 +32,7 @@ class AIServiceManager:
         """Initialize AI services."""
         try:
             # Initialize facial recognition pipeline
-            self._pipeline = FacialRecognitionPipeline(
-                face_detector=CVFaceDetector(),
-                face_recognizer=FaceRecognitionLibRecognizer(model='cnn'),
-                confidence_threshold=settings.AI_SETTINGS['FACE_RECOGNITION_THRESHOLD']
-            )
+            self._pipeline = FacialRecognitionPipeline()
             
             # Load training data
             training_data_path = os.path.join(

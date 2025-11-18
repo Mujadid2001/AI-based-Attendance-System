@@ -34,37 +34,6 @@ class AuthenticationViewSet(viewsets.ViewSet):
         return ip
     
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
-    def register_student_with_face(self, request):
-        """Register new student with face capture."""
-        serializer = UserRegistrationSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-
-            # Create student profile
-            student_profile = StudentProfile.objects.create(
-                user=user,
-                roll_number=request.data.get('roll_number'),
-                department=request.data.get('department'),
-                semester=request.data.get('semester')
-            )
-
-            # Save face image
-            face_image = request.FILES.get('face_image')
-            if face_image:
-                ai_manager = get_ai_manager()
-                ai_manager.register_student_face(face_image, student_profile)
-
-            logger.info(f"New student registered: {user.email}")
-            return Response(
-                {
-                    'message': _('Registration successful. Please log in.'),
-                    'user': UserSerializer(user).data
-                },
-                status=status.HTTP_201_CREATED
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
         """Register new user."""
         serializer = UserRegistrationSerializer(data=request.data)
@@ -87,8 +56,10 @@ class AuthenticationViewSet(viewsets.ViewSet):
         user_data = {
             'email': request.data.get('email'),
             'password': request.data.get('password'),
+            'password_confirm': request.data.get('password'),  # Use same password for confirmation
             'first_name': request.data.get('first_name'),
             'last_name': request.data.get('last_name'),
+            'role': User.Role.STUDENT,  # Set role as student
         }
         
         # Extract student profile data
@@ -220,8 +191,9 @@ class AuthenticationViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def logout(self, request):
         """Logout user."""
+        user_email = request.user.email
         logout(request)
-        logger.info(f"User logged out: {request.user.email}")
+        logger.info(f"User logged out: {user_email}")
         return Response(
             {'message': _('Logout successful.')},
             status=status.HTTP_200_OK

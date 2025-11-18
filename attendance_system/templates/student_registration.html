@@ -361,21 +361,47 @@
     
     async function loadFaceApiModels() {
         try {
-            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-            await Promise.all([
-                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-            ]);
-            console.log('Face API models loaded successfully');
+            // Check if face-api is available
+            if (typeof faceapi === 'undefined') {
+                console.warn('Face-api library not loaded yet, waiting...');
+                // Wait for the library to load
+                await new Promise((resolve) => {
+                    const checkInterval = setInterval(() => {
+                        if (typeof faceapi !== 'undefined') {
+                            clearInterval(checkInterval);
+                            resolve();
+                        }
+                    }, 100);
+                    // Timeout after 10 seconds
+                    setTimeout(() => {
+                        clearInterval(checkInterval);
+                        resolve();
+                    }, 10000);
+                });
+            }
+            
+            if (typeof faceapi !== 'undefined') {
+                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+                ]);
+                console.log('Face API models loaded successfully');
+            } else {
+                console.warn('Face-api library not available, proceeding without face validation');
+            }
         } catch (error) {
             console.error('Error loading face-api models:', error);
-            showError('faceError', 'Failed to load face detection models');
+            console.warn('Proceeding without face detection validation');
         }
     }
     
     async function startRegistrationWebcam() {
         try {
+            // Clear any previous errors
+            document.getElementById('faceError').innerHTML = '';
+            
             stream = await navigator.mediaDevices.getUserMedia({ 
                 video: { 
                     width: { ideal: 640 },
@@ -387,16 +413,34 @@
             const video = document.getElementById('registrationWebcam');
             video.srcObject = stream;
             
+            // Wait for video to be ready
+            await new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    video.play();
+                    resolve();
+                };
+            });
+            
+            // Wait a bit more to ensure video dimensions are set
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
             document.getElementById('webcamStatus').innerHTML = '<i class="fas fa-video text-success"></i> Ready';
             document.getElementById('captureFaceBtn').style.display = 'block';
             document.getElementById('stopWebcamBtn').style.display = 'block';
-            document.querySelector('button:nth-of-type(1)').style.display = 'none';
             
-            // Start face detection overlay
-            detectFaces();
+            // Hide the start button
+            const startBtn = document.querySelector('.btn-group button:first-child');
+            if (startBtn) startBtn.style.display = 'none';
+            
+            // Start face detection overlay if available
+            if (typeof faceapi !== 'undefined' && faceapi.nets.tinyFaceDetector.isLoaded) {
+                detectFaces();
+            }
+            
+            console.log('Webcam started successfully, video dimensions:', video.videoWidth, 'x', video.videoHeight);
         } catch (error) {
             console.error('Webcam error:', error);
-            showError('faceError', 'Unable to access webcam. Please check permissions.');
+            showError('faceError', 'Unable to access webcam. Please check permissions and ensure you are using HTTPS or localhost.');
         }
     }
     
@@ -412,39 +456,64 @@
     
     async function captureFace() {
         const video = document.getElementById('registrationWebcam');
+        
+        // Check if video is ready
+        if (!video.srcObject || video.readyState < 2) {
+            showError('faceError', '⚠️ Webcam is not ready yet. Please wait a moment and try again.');
+            return;
+        }
+        
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+        
+        // Check if video has valid dimensions
+        if (canvas.width === 0 || canvas.height === 0) {
+            showError('faceError', '⚠️ Video dimensions not ready. Please wait for webcam to fully initialize.');
+            return;
+        }
+        
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0);
         
-        // Detect face in captured image
-        const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetector());
-        
-        if (detections.length === 0) {
-            showError('faceError', '❌ No face detected. Please position your face clearly in front of camera.');
-            return;
-        }
-        
-        if (detections.length > 1) {
-            showError('faceError', '⚠️ Multiple faces detected. Please ensure only your face is visible.');
-            return;
-        }
-        
-        // Save captured face
-        capturedFaces.push(canvas.toDataURL('image/jpeg'));
-        const count = capturedFaces.length;
-        
-        document.getElementById('captureCount').innerHTML = count;
-        const progress = (count / MIN_FACES_REQUIRED) * 100;
-        document.getElementById('progressFill').style.width = progress + '%';
-        
-        showSuccess('faceSuccess', `✅ Face captured! (${count}/${MIN_FACES_REQUIRED})`);
-        
-        if (count >= MIN_FACES_REQUIRED) {
-            document.getElementById('faceSuccess').innerHTML += '<br>✨ You have enough face captures! You can proceed now.';
-            document.getElementById('proceedStep3Btn').style.display = 'block';
-            stopRegistrationWebcam();
+        try {
+            // Clear any previous error
+            document.getElementById('faceError').innerHTML = '';
+            
+            // Try to detect face in captured image if face-api is loaded
+            if (typeof faceapi !== 'undefined' && faceapi.nets.tinyFaceDetector.isLoaded) {
+                const detections = await faceapi.detectAllFaces(canvas, new faceapi.TinyFaceDetectorOptions());
+                
+                if (detections.length === 0) {
+                    showError('faceError', '❌ No face detected. Please position your face clearly in front of camera.');
+                    return;
+                }
+                
+                if (detections.length > 1) {
+                    showError('faceError', '⚠️ Multiple faces detected. Please ensure only your face is visible.');
+                    return;
+                }
+            } else {
+                console.log('Face detection not available, capturing image without validation');
+            }
+            
+            // Save captured face
+            capturedFaces.push(canvas.toDataURL('image/jpeg', 0.9));
+            const count = capturedFaces.length;
+            
+            document.getElementById('captureCount').innerHTML = count;
+            const progress = (count / MIN_FACES_REQUIRED) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+            
+            showSuccess('faceSuccess', `✅ Face captured! (${count}/${MIN_FACES_REQUIRED})`);
+            
+            if (count >= MIN_FACES_REQUIRED) {
+                showSuccess('faceSuccess', `✅ Face captured! (${count}/${MIN_FACES_REQUIRED})<br>✨ You have enough face captures! You can proceed now.`);
+                document.getElementById('proceedStep3Btn').style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Error capturing face:', error);
+            showError('faceError', 'An error occurred while capturing. Please try again.');
         }
     }
     
@@ -473,10 +542,22 @@
         formData.append('department', document.getElementById('department').value);
         formData.append('semester', document.getElementById('semester').value);
         formData.append('password', document.getElementById('password').value);
+        formData.append('password_confirm', document.getElementById('confirmPassword').value);
+        formData.append('role', 'student'); // Set role as student
 
         // Append face image - sending only the first one for registration
         const faceBlob = dataURLtoBlob(capturedFaces[0]);
         formData.append('face_image', faceBlob, 'face_image.jpg');
+
+        // Debug: Log what we're sending
+        console.log('=== Registration Form Data ===');
+        for (let pair of formData.entries()) {
+            if (pair[0] === 'face_image') {
+                console.log(pair[0] + ': [Blob ' + pair[1].size + ' bytes]');
+            } else {
+                console.log(pair[0] + ': ' + pair[1]);
+            }
+        }
 
         // Display loading state
         const proceedBtn = document.getElementById('proceedStep3Btn');
@@ -492,6 +573,7 @@
             });
 
             const result = await response.json();
+            console.log('Server response:', result);
 
             if (response.ok) {
                 // Update confirmation page
@@ -559,12 +641,19 @@
         const video = document.getElementById('registrationWebcam');
         if (!video || !video.srcObject) return;
         
-        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetector());
-        
-        if (detections.length > 0) {
-            document.getElementById('webcamStatus').innerHTML = '<i class="fas fa-face-smile text-success"></i> Face Detected';
-        } else {
-            document.getElementById('webcamStatus').innerHTML = '<i class="fas fa-video"></i> No Face';
+        try {
+            if (typeof faceapi !== 'undefined' && faceapi.nets.tinyFaceDetector.isLoaded) {
+                const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions());
+                
+                if (detections.length > 0) {
+                    document.getElementById('webcamStatus').innerHTML = '<i class="fas fa-face-smile text-success"></i> Face Detected';
+                } else {
+                    document.getElementById('webcamStatus').innerHTML = '<i class="fas fa-video"></i> No Face';
+                }
+            }
+        } catch (error) {
+            console.error('Face detection error:', error);
+            // Don't show error to user, just log it
         }
         
         requestAnimationFrame(detectFaces);
@@ -583,6 +672,13 @@
     // Initialize
     window.addEventListener('load', function() {
         goToStep(1);
+        console.log('Student Registration page loaded');
+        console.log('Face-api available:', typeof faceapi !== 'undefined');
+    });
+    
+    // Add onclick handler debugging
+    window.addEventListener('error', function(e) {
+        console.error('Global error:', e.error);
     });
 </script>
 

@@ -150,41 +150,94 @@ class ImageProcessor:
 class FacialRecognitionPipeline:
     """Orchestrator for facial recognition operations."""
     
-    def __init__(self):
+    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.6):
         """Initialize pipeline."""
-        self.face_detector = None
-        self.face_recognizer = FaceRecognitionLibRecognizer()
+        self.confidence_threshold = confidence_threshold
+        self.known_encodings = []
+        self.known_ids = []
+        
+        # Initialize components
+        if face_recognizer:
+            self.face_recognizer = face_recognizer
+        else:
+            self.face_recognizer = FaceRecognitionLibRecognizer()
+        
         self.liveness_detector = BlinkLivenessDetector()
         
-        if HAS_CV2:
+        if face_detector:
+            self.face_detector = face_detector
+        elif HAS_CV2:
             try:
                 self.face_detector = CVFaceDetector()
             except Exception as e:
                 logger.warning(f"Could not initialize face detector: {e}")
+                self.face_detector = None
+        else:
+            self.face_detector = None
     
-    def register_face(self, image, student_id: str, confidence_threshold: float = 0.6):
+    def register_face(self, image, student_id: str):
         """Register face for a student."""
-        if not self.face_detector:
-            return None
+        if not HAS_FACE_RECOGNITION:
+            return False, None, "Face recognition library not available"
         
         try:
-            faces = self.face_detector.detect_faces(image)
-            if not faces:
-                return None
+            # Use face_recognition library's own detector for better compatibility
+            # Convert BGR to RGB if needed (OpenCV uses BGR, face_recognition uses RGB)
+            if len(image.shape) == 3 and image.shape[2] == 3:
+                rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) if HAS_CV2 else image
+            else:
+                rgb_image = image
             
-            face_locs = [tuple(f) for f in faces]
-            encoding = self.face_recognizer.get_face_encoding(image, face_locs)
+            # Detect faces using face_recognition library
+            face_locations = face_recognition.face_locations(rgb_image, model='hog')
             
-            if encoding is not None:
-                return {
-                    'student_id': student_id,
-                    'encoding': encoding,
-                    'timestamp': datetime.now()
-                }
+            if len(face_locations) == 0:
+                return False, None, "No face detected in image"
+            
+            if len(face_locations) > 1:
+                return False, None, "Multiple faces detected. Please ensure only one face is visible."
+            
+            # Get face encoding
+            encodings = face_recognition.face_encodings(rgb_image, face_locations)
+            
+            if encodings and len(encodings) > 0:
+                encoding = encodings[0]
+                # Store encoding for future recognition
+                self.known_encodings.append(encoding)
+                self.known_ids.append(student_id)
+                return True, encoding, "Face registered successfully"
+            else:
+                return False, None, "Failed to generate face encoding"
         except Exception as e:
             logger.error(f"Error registering face: {e}")
-        
-        return None
+            return False, None, f"Error: {str(e)}"
+    
+    def load_training_data(self, path: str):
+        """Load training data from file."""
+        try:
+            if os.path.exists(path):
+                with open(path, 'rb') as f:
+                    data = pickle.load(f)
+                    self.known_encodings = data.get('encodings', [])
+                    self.known_ids = data.get('ids', [])
+                logger.info(f"Loaded {len(self.known_ids)} face encodings")
+        except Exception as e:
+            logger.warning(f"Could not load training data: {e}")
+            self.known_encodings = []
+            self.known_ids = []
+    
+    def save_training_data(self, path: str):
+        """Save training data to file."""
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'wb') as f:
+                pickle.dump({
+                    'encodings': self.known_encodings,
+                    'ids': self.known_ids
+                }, f)
+            logger.info(f"Saved {len(self.known_ids)} face encodings")
+        except Exception as e:
+            logger.error(f"Could not save training data: {e}")
     
     def recognize_face(self, image, known_encodings: List, known_ids: List, confidence_threshold: float = 0.6):
         """Recognize face in image."""
