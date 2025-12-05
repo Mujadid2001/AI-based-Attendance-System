@@ -8,7 +8,7 @@ from django.http import HttpResponse
 from apps.attendance.models import AttendanceReport
 
 
-def export_attendance_to_csv(queryset, course_name: str = "Attendance"):
+def export_attendance_to_csv(queryset, course_name: str = "course_name_not_set"):
     """
     Export attendance records to CSV.
     
@@ -23,6 +23,7 @@ def export_attendance_to_csv(queryset, course_name: str = "Attendance"):
     response['Content-Disposition'] = f'attachment; filename="attendance_{course_name}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
     
     writer = csv.writer(response)
+    
     
     # Write headers
     writer.writerow([
