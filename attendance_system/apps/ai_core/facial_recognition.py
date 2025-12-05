@@ -58,7 +58,7 @@ class CVFaceDetector(FaceDetector):
             raise RuntimeError("OpenCV not installed")
         
         if cascade_path is None:
-            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            cascade_path = f"{cv2.data.haarcascades}haarcascade_frontalface_default.xml"
         
         self.face_cascade = cv2.CascadeClassifier(cascade_path)
     
