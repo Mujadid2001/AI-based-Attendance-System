@@ -39,7 +39,7 @@ try:
 except ImportError:
     Image = None
 
-
+# Strategy Pattern
 class FaceDetector(ABC):
     """Abstract base class for face detection."""
     
@@ -47,7 +47,6 @@ class FaceDetector(ABC):
     def detect_faces(self, image):
         """Detect faces in image and return face locations."""
         pass
-
 
 class CVFaceDetector(FaceDetector):
     """OpenCV Cascade Classifier based face detector."""
@@ -68,8 +67,7 @@ class CVFaceDetector(FaceDetector):
             return []
         
         gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        faces = self.face_cascade.detectMultiScale(gray, 1.1, 5)
-        return faces
+        return self.face_cascade.detectMultiScale(gray, 1.1, 5)
 
 
 class FaceRecognizer(ABC):
@@ -111,8 +109,7 @@ class BlinkLivenessDetector(LivenessDetector):
     
     def check_liveness(self, frames):
         """Check liveness via blink detection."""
-        if not HAS_CV2 or not HAS_NUMPY:
-            return True  # Assume live if dependencies missing
+        # Assume live if dependencies missing or no blink detection implemented
         return True
 
 
@@ -155,8 +152,7 @@ class FacialRecognitionPipeline:
         self.confidence_threshold = confidence_threshold
         self.known_encodings = []
         self.known_ids = []
-        
-        # Initialize components
+
         if face_recognizer:
             self.face_recognizer = face_recognizer
         else:
@@ -175,39 +171,40 @@ class FacialRecognitionPipeline:
         else:
             self.face_detector = None
     
+    def _convert_to_rgb(self, image):
+        """Convert image to RGB format."""
+        if len(image.shape) == 3 and image.shape[2] == 3 and HAS_CV2:
+            return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        return image
+
+    def _extract_face_encoding(self, image):
+        """Extract face encoding from image."""
+        rgb_image = self._convert_to_rgb(image)
+        face_locations = face_recognition.face_locations(rgb_image, model='hog')
+        
+        if len(face_locations) == 0:
+            return None, "No face detected in image"
+        elif len(face_locations) > 1:
+            return None, "Multiple faces detected. Please ensure only one face is visible."
+        else:
+            if (encodings := face_recognition.face_encodings(rgb_image, face_locations)):
+                return encodings[0], None
+            else:
+                return None, "Failed to generate face encoding"
+
     def register_face(self, image, student_id: str):
         """Register face for a student."""
         if not HAS_FACE_RECOGNITION:
             return False, None, "Face recognition library not available"
         
         try:
-            # Use face_recognition library's own detector for better compatibility
-            # Convert BGR to RGB if needed (OpenCV uses BGR, face_recognition uses RGB)
-            if len(image.shape) == 3 and image.shape[2] == 3:
-                rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) if HAS_CV2 else image
-            else:
-                rgb_image = image
+            encoding, error_msg = self._extract_face_encoding(image)
+            if error_msg:
+                return False, None, error_msg
             
-            # Detect faces using face_recognition library
-            face_locations = face_recognition.face_locations(rgb_image, model='hog')
-            
-            if len(face_locations) == 0:
-                return False, None, "No face detected in image"
-            
-            if len(face_locations) > 1:
-                return False, None, "Multiple faces detected. Please ensure only one face is visible."
-            
-            # Get face encoding
-            encodings = face_recognition.face_encodings(rgb_image, face_locations)
-            
-            if encodings and len(encodings) > 0:
-                encoding = encodings[0]
-                # Store encoding for future recognition
-                self.known_encodings.append(encoding)
-                self.known_ids.append(student_id)
-                return True, encoding, "Face registered successfully"
-            else:
-                return False, None, "Failed to generate face encoding"
+            self.known_encodings.append(encoding)
+            self.known_ids.append(student_id)
+            return True, encoding, "Face registered successfully"
         except Exception as e:
             logger.error(f"Error registering face: {e}")
             return False, None, f"Error: {str(e)}"

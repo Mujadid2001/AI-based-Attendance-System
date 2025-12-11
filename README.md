@@ -1,26 +1,50 @@
-# AI-Based Attendance System
+# AI-Based Attendance System - Backend API
 
-An intelligent attendance tracking system using facial recognition and voice notifications for educational institutions.
+A Django REST API for an intelligent attendance tracking system using facial recognition and voice notifications. **Backend only** - frontend to be implemented separately in React.
 
-## Features
+## 🎯 Features
 
-- 🔐 **Role-Based Access Control** - Admin, Teacher, Student roles with secure authentication
-- 👤 **Facial Recognition** - Advanced face detection and embedding-based recognition
-- 🎤 **Voice Notifications** - Real-time audio feedback during attendance marking
-- 📊 **Attendance Management** - Session-based tracking with comprehensive reporting
-- 📈 **Analytics** - Detailed attendance statistics and export functionality
-- 🛡️ **Security** - Audit logs, encrypted passwords, RBAC permissions
+- 🔐 **Token Authentication** - Secure REST API with token-based auth
+- 👤 **Facial Recognition** - Advanced face detection and recognition using deep learning
+- 🌐 **WebSocket Support** - Real-time face recognition via WebSockets
+- 🎤 **Voice Notifications** - Audio feedback during attendance marking
+- 📊 **Attendance Management** - Session-based tracking with comprehensive API
+- 🛡️ **Role-Based Access Control** - Admin, Teacher, Student permissions
+- 📈 **REST API** - Full CRUD operations for all resources
+- 📦 **Media Handling** - Face image uploads and storage
 
-## Quick Start
+## 🏗️ Architecture
+
+**Backend Stack:**
+- Django 4.2.7
+- Django REST Framework 3.14.0
+- Django Channels 4.0.0 (WebSocket)
+- Face Recognition (dlib-based)
+- OpenCV for image processing
+- Redis (for production WebSocket)
+
+**Frontend:** Implement separately in React/Next.js/Vue
+
+## 📚 Documentation
+
+See **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)** for complete API reference including:
+- All REST endpoints
+- WebSocket API
+- Authentication methods
+- Request/response formats
+- Example integrations
+
+## 🚀 Quick Start
 
 ### Prerequisites
 - Python 3.8+
 - pip and virtualenv
+- Redis (for production WebSocket support)
 
 ### Installation
 
 ```bash
-# Clone the repository
+# Navigate to project directory
 cd attendance_system
 
 # Create virtual environment
@@ -31,22 +55,61 @@ source venv/bin/activate  # On Mac/Linux
 # Install dependencies
 pip install -r ../requirements.txt
 
+# Set up environment variables
+cp ../.env.development.example .env
+# Edit .env with your settings
+
 # Run migrations
 python manage.py migrate
 
 # Create superuser
 python manage.py createsuperuser
 
-# Load sample data
+# (Optional) Load sample data
 python manage.py populate_data
 
-# Start server
+# Start development server
 python manage.py runserver
 ```
 
-Visit `http://localhost:8000` in your browser.
+### With WebSocket Support (Channels)
 
-## Demo Credentials
+```bash
+# Install and start Redis (for production)
+# Windows: Download from https://github.com/microsoftarchive/redis/releases
+# Linux: sudo apt-get install redis-server
+# Mac: brew install redis
+
+# Run with Daphne (ASGI server)
+daphne -b 0.0.0.0 -p 8000 config.asgi:application
+```
+
+API will be available at `http://localhost:8000/api/`
+
+## 🔑 API Access
+
+### Get Authentication Token
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@example.com", "password": "your-password"}'
+```
+
+Response:
+```json
+{
+  "token": "your-auth-token-here",
+  "user": {...}
+}
+```
+
+### Use Token in Requests
+
+```bash
+curl http://localhost:8000/api/students/ \
+  -H "Authorization: Token your-auth-token-here"
+```
 
 | Role | Email | Password |
 |------|-------|----------|

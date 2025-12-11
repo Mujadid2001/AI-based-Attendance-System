@@ -53,7 +53,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Create new user."""
-        user = User.objects.create_user(
+        return User.objects.create_user(
             email=validated_data['email'],
             first_name=validated_data['first_name'],
             last_name=validated_data['last_name'],
@@ -61,7 +61,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             role=validated_data.get('role', User.Role.STUDENT),
             password=validated_data['password'],
         )
-        return user
+        
 
 
 class UserLoginSerializer(serializers.Serializer):

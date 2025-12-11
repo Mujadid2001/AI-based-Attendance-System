@@ -1,13 +1,5 @@
-"""
-AI/ML service layer for Django integration.
-"""
 import logging
 from django.conf import settings
-from apps.ai_core.facial_recognition import (
-    FacialRecognitionPipeline, CVFaceDetector,
-    FaceRecognitionLibRecognizer, ImageProcessor
-)
-from apps.ai_core.voice_notifier import AttendanceVoiceNotifier
 from apps.student.models import StudentProfile, StudentFaceImage
 from PIL import Image
 import os
@@ -16,44 +8,74 @@ logger = logging.getLogger(__name__)
 
 
 class AIServiceManager:
-    """Singleton manager for AI services."""
+    """Singleton manager for AI services with lazy loading."""
     
     _instance = None
     _pipeline = None
     _voice_notifier = None
+    _pipeline_initialized = False
+    _voice_initialized = False
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._initialize()
         return cls._instance
     
-    def _initialize(self):
-        """Initialize AI services."""
+    def _ensure_pipeline_initialized(self):
+        if self._pipeline_initialized:
+            return
+        
+        self._initialize_pipeline()
+    
+    def _initialize_pipeline(self):
+        """Initialize the facial recognition pipeline."""
         try:
+            # Import only when needed to avoid slow startup
+            from apps.ai_core.facial_recognition import (
+                FacialRecognitionPipeline, CVFaceDetector,
+                FaceRecognitionLibRecognizer, ImageProcessor
+            )
+            
             # Initialize facial recognition pipeline
             self._pipeline = FacialRecognitionPipeline()
             
-            # Load training data
+            # Load training data if exists
             training_data_path = os.path.join(
                 settings.AI_SETTINGS['MODELS_DIR'],
                 'face_encodings.pkl'
             )
-            self._pipeline.load_training_data(training_data_path)
+            if os.path.exists(training_data_path):
+                self._pipeline.load_training_data(training_data_path)
             
-            # Initialize voice notifier
-            self._voice_notifier = AttendanceVoiceNotifier()
-            
-            logger.info("AI services initialized successfully")
+            self._pipeline_initialized = True
+            logger.info("Facial recognition pipeline initialized")
         except Exception as e:
-            logger.error(f"Error initializing AI services: {e}")
+            logger.error(f"Error initializing facial recognition pipeline: {e}")
+            raise
     
-    def get_pipeline(self) -> FacialRecognitionPipeline:
-        """Get facial recognition pipeline."""
+    def _ensure_voice_initialized(self):
+        """Lazy initialize voice notifier only when needed."""
+        if not self._voice_initialized:
+            try:
+                # Import only when needed
+                from apps.ai_core.voice_notifier import AttendanceVoiceNotifier
+                
+                self._voice_notifier = AttendanceVoiceNotifier()
+                self._voice_initialized = True
+                logger.info("Voice notifier initialized")
+            except Exception as e:
+                logger.error(f"Error initializing voice notifier: {e}")
+                # Don't raise - voice is optional
+                self._voice_notifier = None
+    
+    def get_pipeline(self):
+        """Get facial recognition pipeline (lazy loads on first access)."""
+        self._ensure_pipeline_initialized()
         return self._pipeline
     
-    def get_voice_notifier(self) -> AttendanceVoiceNotifier:
-        """Get voice notifier."""
+    def get_voice_notifier(self):
+        """Get voice notifier (lazy loads on first access)."""
+        self._ensure_voice_initialized()
         return self._voice_notifier
     
     def register_student_face(self, image_file, student: StudentProfile) -> dict:
@@ -74,6 +96,12 @@ class AIServiceManager:
         }
         
         try:
+            # Ensure pipeline is initialized
+            self._ensure_pipeline_initialized()
+            
+            # Import ImageProcessor
+            from apps.ai_core.facial_recognition import ImageProcessor
+            
             # Convert image to numpy array
             image = Image.open(image_file)
             image_array = ImageProcessor.convert_pil_to_cv2(image)
@@ -134,6 +162,12 @@ class AIServiceManager:
             dict with recognition result
         """
         try:
+            # Ensure pipeline is initialized
+            self._ensure_pipeline_initialized()
+            
+            # Import ImageProcessor
+            from apps.ai_core.facial_recognition import ImageProcessor
+            
             # Convert image to numpy array
             if isinstance(image_file, bytes):
                 image_array = ImageProcessor.convert_image_bytes_to_cv2(image_file)
@@ -175,6 +209,9 @@ class AIServiceManager:
     def load_all_student_faces(self) -> bool:
         """Load all registered student faces into pipeline."""
         try:
+            # Ensure pipeline is initialized
+            self._ensure_pipeline_initialized()
+            
             students = StudentProfile.objects.filter(
                 is_face_registered=True,
                 face_embedding__isnull=False
@@ -196,6 +233,9 @@ class AIServiceManager:
     def save_training_data(self) -> bool:
         """Save current training data."""
         try:
+            # Ensure pipeline is initialized
+            self._ensure_pipeline_initialized()
+            
             training_data_path = os.path.join(
                 settings.AI_SETTINGS['MODELS_DIR'],
                 'face_encodings.pkl'
@@ -207,6 +247,9 @@ class AIServiceManager:
     
     def set_confidence_threshold(self, threshold: float) -> bool:
         """Adjust confidence threshold for recognition."""
+        # Ensure pipeline is initialized
+        self._ensure_pipeline_initialized()
+        
         if 0 <= threshold <= 1:
             self._pipeline.confidence_threshold = threshold
             logger.info(f"Confidence threshold set to {threshold}")

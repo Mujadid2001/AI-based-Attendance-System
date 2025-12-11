@@ -1,6 +1,7 @@
 """
-Base settings for AI-based Attendance System.
+Base settings for AI-based Attendance System - Backend API Only.
 These settings are shared between development and production.
+Frontend will be implemented separately in React.
 """
 import os
 from pathlib import Path
@@ -18,18 +19,19 @@ SECRET_KEY = config(
 
 # Application definition
 INSTALLED_APPS = [
-    #Must be place first apps
-    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',
+    'django.contrib.staticfiles',  # Keep for admin panel static files
     # Third Party Apps
     'rest_framework',
-    'channels',
-    # Functioning Apps
+    'rest_framework_simplejwt',
+    'silk',
+    'drf_spectacular_sidecar',
+    
+    # Custom Apps
     'apps.authentication',
     'apps.student',
     'apps.attendance',
@@ -44,17 +46,23 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'silk.middleware.SilkyMiddleware',
 ]
+SPECTACULAR_SETTINGS = {
+    'SWAGGER_UI_DIST': 'SIDECAR',  # shorthand to use the sidecar instead
+    'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
+    'REDOC_DIST': 'SIDECAR',
+    # OTHER SETTINGS
+}
 
 ROOT_URLCONF = 'config.urls'
 
+# Minimal template configuration (only for Django admin)
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [
-            os.path.join(BASE_DIR, 'templates'),
-        ],
-        'APP_DIRS': True,
+        'DIRS': [],  # No custom templates
+        'APP_DIRS': True,  # Only app templates (admin)
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',
@@ -67,7 +75,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
-ASGI_APPLICATION = 'config.asgi.application'
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -91,14 +98,11 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
+# Static files (for Django admin only)
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'static'),
-]
 
-# Media files
+# Media files (user uploads - face images, etc.)
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
@@ -116,6 +120,7 @@ AUTHENTICATION_BACKENDS = [
 # REST Framework configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
@@ -123,6 +128,11 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer', 
+    ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 DATABASES = {
@@ -135,3 +145,5 @@ DATABASES = {
         'PORT': config('DB_PORT', default=''),
     }
 }
+
+SILKY_META = True

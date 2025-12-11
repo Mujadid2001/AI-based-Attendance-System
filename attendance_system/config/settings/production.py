@@ -156,9 +156,9 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],  # Redis URL
-            "capacity": 1500,  # default 100
-            "expiry": 10,  # default 60
+            "hosts": [config('REDIS_URL', default='redis://127.0.0.1:6379/0')],
+            "capacity": 1500,  # Maximum messages in channel
+            "expiry": 10,  # Message expiry in seconds
         },
     },
 }
