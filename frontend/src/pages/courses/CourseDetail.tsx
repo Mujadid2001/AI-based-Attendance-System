@@ -59,9 +59,7 @@ const CourseDetail = () => {
   }
 
   const handleEdit = () => {
-    toast.info('Edit course functionality coming soon!')
-    // TODO: Navigate to edit page or open modal
-    // navigate(`/courses/${id}/edit`)
+    navigate(`/courses/${id}/edit`);
   }
 
   const fetchCourseDetails = async () => {

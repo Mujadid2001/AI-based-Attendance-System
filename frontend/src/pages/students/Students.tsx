@@ -50,10 +50,12 @@ const Students = () => {
           <h1 className="text-3xl font-bold text-gray-900">Students</h1>
           <p className="text-gray-600 mt-1">Manage student profiles and information</p>
         </div>
-        <Button>
-          <IoAdd className="w-5 h-5 mr-2" />
-          Add Student
-        </Button>
+        <Link to="/students/add">
+          <Button>
+            <IoAdd className="w-5 h-5 mr-2" />
+            Add Student
+          </Button>
+        </Link>
       </div>
 
       {/* Search */}

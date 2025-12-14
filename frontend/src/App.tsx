@@ -10,8 +10,11 @@ import ForgotPassword from '@pages/auth/ForgotPassword'
 import Dashboard from '@pages/Dashboard'
 import Students from '@pages/students/Students'
 import StudentDetail from '@pages/students/StudentDetail'
+import AddStudent from '@pages/students/AddStudent'
+import EditStudent from '@pages/students/EditStudent'
 import Courses from '@pages/courses/Courses'
 import CourseDetail from '@pages/courses/CourseDetail'
+import EditCourse from '@pages/courses/EditCourse'
 import Attendance from '@pages/attendance/Attendance'
 import AttendanceSession from '@pages/attendance/AttendanceSession'
 import FaceRecognition from '@pages/ai/FaceRecognition'
@@ -38,11 +41,14 @@ function App() {
           
           {/* Student Management */}
           <Route path="students" element={<Students />} />
+          <Route path="students/add" element={<AddStudent />} />
           <Route path="students/:id" element={<StudentDetail />} />
+          <Route path="students/:id/edit" element={<EditStudent />} />
           
           {/* Course Management */}
           <Route path="courses" element={<Courses />} />
           <Route path="courses/:id" element={<CourseDetail />} />
+          <Route path="courses/:id/edit" element={<EditCourse />} />
           
           {/* Attendance */}
           <Route path="attendance" element={<Attendance />} />
