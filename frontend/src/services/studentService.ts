@@ -22,8 +22,8 @@ export const studentService = {
   },
 
   // Create student
-  createStudent: async (data: Partial<StudentProfile>): Promise<StudentProfile> => {
-    const response = await api.post<StudentProfile>('/students/profiles/', data)
+  createStudent: async (data: any): Promise<StudentProfile> => {
+    const response = await api.post<StudentProfile>('/students/profiles/register_student/', data)
     return response.data
   },
 

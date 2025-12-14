@@ -6,40 +6,41 @@ from django.contrib.auth import get_user_model
 from apps.student.models import (
     StudentProfile, Course, Enrollment, StudentFaceImage
 )
+from apps.authentication.serializers import UserRegistrationSerializer
 
 User = get_user_model()
 
 
 class CourseSerializer(serializers.ModelSerializer):
     """Serializer for Course model."""
-    
+
     instructor_name = serializers.CharField(
         source='instructor.get_full_name',
         read_only=True
     )
     student_count = serializers.SerializerMethodField()
     is_full = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = Course
         fields = [
             'id', 'code', 'name', 'description', 'instructor',
             'instructor_name', 'max_students', 'student_count',
-            'is_full', 'is_active', 'semester', 'year', 
+            'is_full', 'is_active', 'semester', 'year',
             'start_date', 'end_date', 'created_at'
         ]
         read_only_fields = ['created_at']
-    
+
     def get_student_count(self, obj):
         return obj.student_count()
-    
+
     def get_is_full(self, obj):
         return obj.is_full()
 
 
 class StudentFaceImageSerializer(serializers.ModelSerializer):
     """Serializer for StudentFaceImage model."""
-    
+
     class Meta:
         model = StudentFaceImage
         fields = [
@@ -50,7 +51,7 @@ class StudentFaceImageSerializer(serializers.ModelSerializer):
 
 class StudentProfileSerializer(serializers.ModelSerializer):
     """Serializer for StudentProfile model."""
-    
+
     user_email = serializers.CharField(
         source='user.email',
         read_only=True
@@ -64,7 +65,7 @@ class StudentProfileSerializer(serializers.ModelSerializer):
         read_only=True
     )
     face_images = StudentFaceImageSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = StudentProfile
         fields = [
@@ -79,21 +80,52 @@ class StudentProfileSerializer(serializers.ModelSerializer):
         ]
 
 
-class StudentProfileCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for creating/updating StudentProfile."""
-    
+class StudentProfileUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating StudentProfile."""
+
     first_name = serializers.CharField(max_length=150)
     last_name = serializers.CharField(max_length=150)
     email = serializers.EmailField()
     phone = serializers.CharField(required=False, allow_blank=True)
-    
+
     class Meta:
         model = StudentProfile
         fields = [
             'roll_number', 'email', 'first_name', 'last_name', 'phone',
             'department', 'semester'
         ]
-    
+
+    def update(self, instance, validated_data):
+        """Update student and user."""
+        user_data = {
+            'first_name': validated_data.pop('first_name', instance.user.first_name),
+            'last_name': validated_data.pop('last_name', instance.user.last_name),
+            'email': validated_data.pop('email', instance.user.email),
+            'phone': validated_data.pop('phone', instance.user.phone),
+        }
+        user = instance.user
+        for attr, value in user_data.items():
+            setattr(user, attr, value)
+        user.save()
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        return instance
+
+class StudentUserRegistrationSerializer(UserRegistrationSerializer):
+    """Serializer for student registration, combining user and profile creation."""
+
+    roll_number = serializers.CharField(max_length=50)
+    department = serializers.CharField(max_length=100, required=False)
+    semester = serializers.IntegerField(required=False)
+
+    class Meta(UserRegistrationSerializer.Meta):
+        fields = UserRegistrationSerializer.Meta.fields + [
+            'roll_number', 'department', 'semester'
+        ]
+
     def validate_roll_number(self, value):
         """Validate roll number uniqueness."""
         if StudentProfile.objects.filter(roll_number=value).exists():
@@ -101,44 +133,24 @@ class StudentProfileCreateUpdateSerializer(serializers.ModelSerializer):
                 "Student with this roll number already exists."
             )
         return value
-    
-    def validate_email(self, value):
-        """Validate email uniqueness."""
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError(
-                "Email already registered."
-            )
-        return value
-    
+
     def create(self, validated_data):
-        """Create student and user."""
-        email = validated_data.pop('email')
-        first_name = validated_data.pop('first_name')
-        last_name = validated_data.pop('last_name')
-        phone = validated_data.pop('phone', '')
-        
-        # Create user
-        user = User.objects.create_user(
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-            phone=phone,
-            role=User.Role.STUDENT,
-            password='DefaultPassword123!'
-        )
-        
-        # Create student profile
-        student = StudentProfile.objects.create(
+        """Create student user and profile."""
+        validated_data['role'] = User.Role.STUDENT
+        user = super().create(validated_data)
+
+        StudentProfile.objects.create(
             user=user,
-            **validated_data
+            roll_number=validated_data['roll_number'],
+            department=validated_data.get('department'),
+            semester=validated_data.get('semester')
         )
-        
-        return student
+        return user
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
     """Serializer for Enrollment model."""
-    
+
     student_roll = serializers.CharField(
         source='student.roll_number',
         read_only=True
@@ -151,7 +163,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         source='course.name',
         read_only=True
     )
-    
+
     class Meta:
         model = Enrollment
         fields = [
@@ -163,7 +175,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
 class StudentStatsSerializer(serializers.Serializer):
     """Serializer for student statistics."""
-    
+
     total_students = serializers.IntegerField()
     active_students = serializers.IntegerField()
     face_registered = serializers.IntegerField()
