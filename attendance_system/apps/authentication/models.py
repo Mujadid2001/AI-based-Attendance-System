@@ -1,10 +1,13 @@
 """
 Authentication models using industry-standard practices.
 """
+import uuid
+from datetime import timedelta
 from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import EmailValidator
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
@@ -81,7 +84,7 @@ class User(AbstractUser):
     
     # Set USERNAME_FIELD
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['email', 'password']
+    REQUIRED_FIELDS = ['password']
     
     objects = UserManager()
     
@@ -145,3 +148,53 @@ class LoginLog(models.Model):
     def __str__(self):
         status = "Success" if self.success else "Failed"
         return f"{self.user.email} - {status} - {self.timestamp}"
+
+
+class EmailVerificationToken(models.Model):
+    """Email verification tokens for user registration."""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='verification_tokens'
+    )
+    token = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        help_text=_('Unique verification token')
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(
+        help_text=_('Token expiration time')
+    )
+    is_used = models.BooleanField(
+        default=False,
+        help_text=_('Whether the token has been used')
+    )
+    
+    class Meta:
+        verbose_name = _('Email Verification Token')
+        verbose_name_plural = _('Email Verification Tokens')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['token']),
+            models.Index(fields=['user', '-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.token}"
+    
+    def save(self, *args, **kwargs):
+        """Set expiration time on creation."""
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(hours=48)
+        super().save(*args, **kwargs)
+    
+    def is_expired(self):
+        """Check if token is expired."""
+        return timezone.now() > self.expires_at
+    
+    def is_valid(self):
+        """Check if token is valid (not used and not expired)."""
+        return not self.is_used and not self.is_expired()

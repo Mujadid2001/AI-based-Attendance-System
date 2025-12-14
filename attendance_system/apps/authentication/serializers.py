@@ -4,7 +4,7 @@ Serializers for authentication endpoints.
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
 from django.utils.translation import gettext_lazy as _
-from apps.authentication.models import LoginLog
+from apps.authentication.models import LoginLog, EmailVerificationToken
 
 User = get_user_model()
 
@@ -161,3 +161,51 @@ class LoginLogSerializer(serializers.ModelSerializer):
             'failure_reason', 'timestamp'
         ]
         read_only_fields = fields
+
+
+class EmailVerificationSerializer(serializers.Serializer):
+    """Serializer for email verification."""
+    
+    token = serializers.UUIDField(required=True)
+    
+    def validate_token(self, value):
+        """Validate verification token."""
+        try:
+            token = EmailVerificationToken.objects.get(token=value)
+
+            if token.is_used:
+                raise serializers.ValidationError(
+                    _("This verification link has already been used.")
+                )
+
+            if token.is_expired():
+                raise serializers.ValidationError(
+                    _("This verification link has expired. Please request a new one.")
+                )
+
+            return token
+
+        except EmailVerificationToken.DoesNotExist as e:
+            raise serializers.ValidationError(
+                _("Invalid verification token.")
+            ) from e
+
+
+class ResendVerificationSerializer(serializers.Serializer):
+    """Serializer for resending verification email."""
+    
+    email = serializers.EmailField(required=True)
+    
+    def validate_email(self, value):
+        """Validate email exists."""
+        try:
+            user = User.objects.get(email=value)
+            if user.is_verified:
+                raise serializers.ValidationError(
+                    _("This email is already verified.")
+                )
+            return user
+        except User.DoesNotExist as e:
+            raise serializers.ValidationError(
+                _("No account found with this email address.")
+            ) from e

@@ -1,187 +1,302 @@
-# AI-Based Attendance System - Backend API
+# 🎓 AI-Based Attendance System
 
-A Django REST API for an intelligent attendance tracking system using facial recognition and voice notifications. **Backend only** - frontend to be implemented separately in React.
+Modern attendance management with AI-powered facial recognition. Complete separation of Django REST API backend and React TypeScript frontend.
 
-## 🎯 Features
+## ✨ Features
 
-- 🔐 **Token Authentication** - Secure REST API with token-based auth
-- 👤 **Facial Recognition** - Advanced face detection and recognition using deep learning
-- 🌐 **WebSocket Support** - Real-time face recognition via WebSockets
-- 🎤 **Voice Notifications** - Audio feedback during attendance marking
-- 📊 **Attendance Management** - Session-based tracking with comprehensive API
-- 🛡️ **Role-Based Access Control** - Admin, Teacher, Student permissions
-- 📈 **REST API** - Full CRUD operations for all resources
-- 📦 **Media Handling** - Face image uploads and storage
+- 👤 **AI Facial Recognition** - Automatic attendance via face detection
+- 🔐 **JWT Authentication** - Secure token-based auth with email verification
+- 👥 **Role-Based Access** - Admin, Teacher, Student permissions
+- 📊 **Attendance Tracking** - Sessions, reports, manual/AI marking
+- 🎤 **Voice Feedback** - Audio notifications for attendance
+- 🌐 **Real-time Updates** - WebSocket support
+- 📱 **Modern UI** - Responsive React frontend
 
-## 🏗️ Architecture
+## 🏗️ Tech Stack
 
-**Backend Stack:**
-- Django 4.2.7
-- Django REST Framework 3.14.0
-- Django Channels 4.0.0 (WebSocket)
-- Face Recognition (dlib-based)
-- OpenCV for image processing
-- Redis (for production WebSocket)
+**Backend:** Django 4.2.7 | DRF | JWT | dlib | face_recognition | OpenCV | Channels  
+**Frontend:** React 18 | TypeScript | Vite | TailwindCSS | Axios | Zustand
 
-**Frontend:** Implement separately in React/Next.js/Vue
+---
 
-## 📚 Documentation
-
-See **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)** for complete API reference including:
-- All REST endpoints
-- WebSocket API
-- Authentication methods
-- Request/response formats
-- Example integrations
-
-## 🚀 Quick Start
+## 🚀 Quick Setup (WSL/Ubuntu)
 
 ### Prerequisites
-- Python 3.8+
-- pip and virtualenv
-- Redis (for production WebSocket support)
+
+```bash
+# Install Python, Node.js and build tools
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv build-essential cmake
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+```
 
 ### Installation
 
 ```bash
-# Navigate to project directory
+# 1. Navigate to project (from Windows, use WSL path)
+cd "/mnt/d/FYP project/AI-based-Attendance-System"
+
+# 2. Make setup script executable
+chmod +x setup.sh start.sh
+
+# 3. Run setup (installs everything)
+./setup.sh
+
+# 4. Start both servers
+./start.sh
+```
+
+**Access from Windows browser:**
+- Frontend: http://localhost:3000
+- Backend: http://localhost:8000/api
+- Admin: http://localhost:8000/admin
+
+---
+
+## 📖 Detailed Setup
+
+### Step 1: System Dependencies
+
+```bash
+sudo apt update
+sudo apt install -y \
+    build-essential cmake \
+    python3 python3-pip python3-venv \
+    libopenblas-dev liblapack-dev \
+    libx11-dev libgtk-3-dev \
+    libgl1-mesa-glx
+```
+
+### Step 2: Backend Setup
+
+```bash
 cd attendance_system
 
 # Create virtual environment
-python -m venv venv
-venv\Scripts\activate  # On Windows
-source venv/bin/activate  # On Mac/Linux
+python3 -m venv venv
+source venv/bin/activate
 
-# Install dependencies
+# Install dependencies (dlib takes 5-10 min to compile)
+pip install --upgrade pip
 pip install -r ../requirements.txt
 
-# Set up environment variables
-cp ../.env.development.example .env
-# Edit .env with your settings
-
-# Run migrations
+# Setup database
 python manage.py migrate
 
-# Create superuser
+# Create admin user
 python manage.py createsuperuser
 
-# (Optional) Load sample data
-python manage.py populate_data
-
-# Start development server
-python manage.py runserver
+# Collect static files
+python manage.py collectstatic --noinput
 ```
 
-### With WebSocket Support (Channels)
+### Step 3: Frontend Setup
 
 ```bash
-# Install and start Redis (for production)
-# Windows: Download from https://github.com/microsoftarchive/redis/releases
-# Linux: sudo apt-get install redis-server
-# Mac: brew install redis
+cd frontend
 
-# Run with Daphne (ASGI server)
-daphne -b 0.0.0.0 -p 8000 config.asgi:application
+# Copy environment file
+cp .env.example .env
+
+# Install dependencies
+npm install
 ```
 
-API will be available at `http://localhost:8000/api/`
+### Step 4: Start Services
 
-## 🔑 API Access
-
-### Get Authentication Token
-
+**Backend:**
 ```bash
-curl -X POST http://localhost:8000/api/auth/login/ \
-  -H "Content-Type: application/json" \
-  -d '{"email": "admin@example.com", "password": "your-password"}'
+cd attendance_system
+source venv/bin/activate
+python manage.py runserver 0.0.0.0:8000
 ```
 
-Response:
-```json
-{
-  "token": "your-auth-token-here",
-  "user": {...}
-}
-```
-
-### Use Token in Requests
-
+**Frontend:**
 ```bash
-curl http://localhost:8000/api/students/ \
-  -H "Authorization: Token your-auth-token-here"
+cd frontend
+npm run dev -- --host 0.0.0.0
 ```
 
-| Role | Email | Password |
-|------|-------|----------|
-| Admin | admin@attendance.com | Admin@123 |
-| Teacher | teacher@attendance.com | Teacher@123 |
-| Student | (Check admin panel) | (Check admin panel) |
+---
 
-## API Endpoints
+## 🗂️ Project Structure
+
+```
+AI-based-Attendance-System/
+├── attendance_system/          # Django Backend
+│   ├── apps/
+│   │   ├── authentication/    # User auth & JWT
+│   │   ├── student/          # Students & courses
+│   │   ├── attendance/       # Attendance tracking
+│   │   └── ai_core/         # Face recognition AI
+│   ├── config/              # Settings
+│   ├── media/              # Uploaded images
+│   └── manage.py
+│
+├── frontend/                  # React Frontend
+│   ├── src/
+│   │   ├── pages/           # UI pages
+│   │   ├── services/        # API integration
+│   │   └── components/      # Reusable components
+│   └── package.json
+│
+├── setup.sh                  # Setup script
+├── start.sh                  # Start script
+└── requirements.txt          # Python dependencies
+```
+
+---
+
+## 🔧 Configuration
+
+### Backend (.env in root)
+```env
+DEBUG=True
+SECRET_KEY=your-secret-key
+DB_ENGINE=django.db.backends.sqlite3
+DB_NAME=db.sqlite3
+EMAIL_HOST_USER=your-email@gmail.com
+EMAIL_HOST_PASSWORD=your-app-password
+CORS_ALLOWED_ORIGINS=http://localhost:3000
+```
+
+### Frontend (frontend/.env)
+```env
+VITE_API_URL=http://localhost:8000/api
+NODE_ENV=development
+```
+
+---
+
+## 📱 Usage
+
+### For Students
+1. Register → Verify email → Login
+2. Complete profile
+3. Register face (Profile → Face Registration)
+4. Enroll in courses
+5. Attend classes
+
+### For Teachers
+1. Login
+2. Create course
+3. Add students
+4. Create attendance session
+5. Mark attendance (manual or AI camera)
+6. View reports
+
+### For Admins
+1. Access admin panel: http://localhost:8000/admin
+2. Manage users, courses, attendance
+3. Configure system settings
+
+---
+
+## 🔌 API Endpoints
 
 ### Authentication
-- `POST /api/auth/register/` - Register new user
-- `POST /api/auth/login/` - User login
-- `POST /api/auth/logout/` - User logout
-- `GET /api/auth/profile/` - Get user profile
+- `POST /api/auth/authentication/register/` - Register
+- `POST /api/auth/authentication/login/` - Login
+- `POST /api/auth/authentication/verify-email/` - Verify email
+- `GET /api/auth/authentication/me/` - Current user
 
-### Student Management
-- `GET /api/students/` - List students
-- `POST /api/students/` - Create student
-- `GET /api/courses/` - List courses
-- `POST /api/face-register/` - Register face
+### Students & Courses
+- `GET /api/students/profiles/` - List students
+- `POST /api/students/profiles/` - Create student
+- `GET /api/students/courses/` - List courses
+- `POST /api/students/enrollments/` - Enroll
 
 ### Attendance
 - `POST /api/attendance/sessions/` - Create session
-- `POST /api/attendance/mark/` - Mark attendance
-- `GET /api/attendance/reports/` - Get reports
+- `POST /api/attendance/records/` - Mark attendance
+- `GET /api/attendance/today/` - Today's records
 
 ### AI Operations
-- `POST /api/ai/face-recognize/` - Recognize face and mark attendance
-- `GET /api/ai/training-data/` - Get training data
+- `POST /api/ai/face-registration/register-face/` - Register face
+- `POST /api/ai/face-recognition/recognize/` - Recognize face
+- `POST /api/ai/face-recognition/mark-attendance/` - Auto mark
 
-## Project Structure
+**Full API docs:** http://localhost:8000/api/
 
+---
+
+## 🐛 Troubleshooting
+
+### Port in use
+```bash
+# Kill process on port
+kill $(lsof -t -i:8000)
+kill $(lsof -t -i:3000)
 ```
-attendance_system/
-├── apps/
-│   ├── authentication/  # User authentication & RBAC
-│   ├── student/         # Student & course management
-│   ├── attendance/      # Attendance tracking
-│   └── ai_core/         # Facial recognition & voice
-├── config/              # Django configuration
-├── templates/           # HTML templates
-├── static/              # CSS, JS, images
-└── manage.py            # Django management
+
+### Module not found
+```bash
+cd attendance_system
+source venv/bin/activate
+pip install -r ../requirements.txt
 ```
 
-## Technology Stack
+### Database issues
+```bash
+cd attendance_system
+source venv/bin/activate
+python manage.py migrate --run-syncdb
+```
 
-- **Backend**: Django 4.2.7, Django REST Framework 3.14
-- **AI/ML**: OpenCV, face_recognition, dlib
-- **Voice**: pyttsx3
-- **Database**: SQLite/MySQL
-- **Frontend**: Bootstrap 5, HTML5, JavaScript
+### Frontend errors
+```bash
+cd frontend
+rm -rf node_modules package-lock.json
+npm install
+```
 
-## Documentation
+---
 
-- **Settings Configuration**: Edit `.env` file for database and AI settings
-- **Admin Interface**: Access at `/admin/` for user and data management
-- **API Documentation**: Available at `/api/` endpoints
+## 🎯 Common Commands
 
-## Security Features
+```bash
+# Start both services
+./start.sh
 
-- Custom User model with email authentication
-- Password hashing and validation
-- RBAC permission classes
-- Login audit logs
+# Backend only
+cd attendance_system && source venv/bin/activate
+python manage.py runserver 0.0.0.0:8000
+
+# Frontend only
+cd frontend && npm run dev -- --host 0.0.0.0
+
+# Database migrations
+cd attendance_system && source venv/bin/activate
+python manage.py makemigrations
+python manage.py migrate
+
+# Create superuser
+cd attendance_system && source venv/bin/activate
+python manage.py createsuperuser
+
+# Django shell
+cd attendance_system && source venv/bin/activate
+python manage.py shell
+```
+
+---
+
+## 🔐 Security
+
+- JWT tokens with auto-refresh (15 min access, 7 day refresh)
+- Email verification required for new accounts
+- Password hashing with PBKDF2
 - CORS protection
-- SQL injection prevention
+- CSRF protection
+- Role-based permissions
 
-## License
+---
 
-MIT License - 2025
+## 📄 License
 
-## Support
+Educational project for FYP.
 
-For issues or questions, contact the development team.
+---
+
+**Made with ❤️ for efficient attendance management**

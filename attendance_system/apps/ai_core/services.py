@@ -3,12 +3,16 @@ from django.conf import settings
 from apps.student.models import StudentProfile, StudentFaceImage
 from PIL import Image
 import os
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 logger = logging.getLogger(__name__)
 
 
 class AIServiceManager:
-    """Singleton manager for AI services with lazy loading."""
+    """Singleton manager for AI services."""
     
     _instance = None
     _pipeline = None

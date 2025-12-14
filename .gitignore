@@ -7,7 +7,6 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
 eggs/
 .eggs/
 lib/
@@ -74,10 +73,6 @@ Thumbs.db
 .coverage
 htmlcov/
 
-# Node modules (if using npm packages)
-node_modules/
-npm-debug.log
-yarn-error.log
 
 # Temporary files
 *.tmp

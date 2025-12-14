@@ -25,7 +25,8 @@ class CourseSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'code', 'name', 'description', 'instructor',
             'instructor_name', 'max_students', 'student_count',
-            'is_full', 'is_active', 'created_at'
+            'is_full', 'is_active', 'semester', 'year', 
+            'start_date', 'end_date', 'created_at'
         ]
         read_only_fields = ['created_at']
     

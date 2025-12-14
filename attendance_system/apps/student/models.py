@@ -42,6 +42,29 @@ class Course(models.Model):
         default=50,
         help_text=_('Maximum number of students')
     )
+    semester = models.CharField(
+        max_length=20,
+        choices=[
+            ('Fall', 'Fall'),
+            ('Spring', 'Spring'),
+            ('Summer', 'Summer'),
+        ],
+        default='Fall',
+        help_text=_('Semester')
+    )
+    year = models.PositiveIntegerField(
+        help_text=_('Academic year')
+    )
+    start_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text=_('Course start date')
+    )
+    end_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text=_('Course end date')
+    )
     is_active = models.BooleanField(
         default=True,
         help_text=_('Course active status')

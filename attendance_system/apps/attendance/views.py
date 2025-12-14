@@ -33,7 +33,13 @@ class AttendanceSessionViewSet(viewsets.ModelViewSet):
     
     queryset = AttendanceSession.objects.all()
     serializer_class = AttendanceSessionSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrTeacher]
+    permission_classes = [IsAuthenticated]
+    
+    def get_permissions(self):
+        """Set different permissions based on action."""
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated(), IsAdminOrTeacher()]
+        return [IsAuthenticated()]
     
     def get_queryset(self):
         """Filter sessions based on user role."""
@@ -43,6 +49,12 @@ class AttendanceSessionViewSet(viewsets.ModelViewSet):
             return AttendanceSession.objects.filter(
                 course__instructor=self.request.user
             )
+        else:  # Student
+            # Students can see sessions for courses they're enrolled in
+            return AttendanceSession.objects.filter(
+                course__enrollments__student__user=self.request.user,
+                course__enrollments__is_active=True
+            ).distinct()
         return AttendanceSession.objects.none()
     
     @action(detail=False, methods=['post'])
@@ -345,7 +357,7 @@ class AttendanceReportViewSet(viewsets.ReadOnlyModelViewSet):
         
         # Write header
         writer.writerow([
-            'Date', 'Course', 'Student', 'Email', 'Status', 'Time Marked', 'Notes'
+            'Date', 'Course', 'Student', 'Email', 'Status', 'Time Marked', 'Remarks'
         ])
         
         # Write data
@@ -357,7 +369,7 @@ class AttendanceReportViewSet(viewsets.ReadOnlyModelViewSet):
                 record.student.user.email,
                 record.status,
                 record.created_at.strftime('%H:%M:%S') if record.created_at else '',
-                record.notes or ''
+                record.remarks or ''
             ])
         
         # Return CSV file
@@ -467,7 +479,7 @@ def get_session_records(request, session_id):
                 'student_email': record.student.user.email,
                 'status': record.status,
                 'time': record.created_at.strftime('%H:%M:%S') if record.created_at else '',
-                'notes': record.notes
+                'remarks': record.remarks
             })
         
         return Response(data)

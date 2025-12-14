@@ -1,6 +1,8 @@
 """
 Views for authentication endpoints.
 """
+
+import contextlib
 import logging
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -8,11 +10,16 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from django.contrib.auth import login, logout, get_user_model
 from django.utils.translation import gettext_lazy as _
+from django.views.decorators.csrf import csrf_exempt
 from apps.authentication.serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserSerializer,
-    UserUpdateSerializer, ChangePasswordSerializer, LoginLogSerializer
+    UserUpdateSerializer, ChangePasswordSerializer, LoginLogSerializer,
+    EmailVerificationSerializer, ResendVerificationSerializer
 )
-from apps.authentication.models import LoginLog
+from apps.authentication.models import LoginLog, EmailVerificationToken
+from apps.authentication.email_utils import (
+    send_verification_email, send_verification_success_email, resend_verification_email
+)
 from apps.authentication.permissions import IsAdmin
 from apps.student.models import StudentProfile
 from apps.ai_core.services import get_ai_manager
@@ -39,11 +46,22 @@ class AuthenticationViewSet(viewsets.ViewSet):
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
+            
+            # Create verification token and send email
+            token = EmailVerificationToken.objects.create(user=user)
+            email_sent = send_verification_email(user, token)
+            
             logger.info(f"New user registered: {user.email}")
+            
+            message = _('Registration successful. Please check your email to verify your account.')
+            if not email_sent:
+                message = _('Registration successful, but verification email could not be sent. Please request a new verification email.')
+            
             return Response(
                 {
-                    'message': _('Registration successful. Please log in.'),
-                    'user': UserSerializer(user).data
+                    'message': message,
+                    'user': UserSerializer(user).data,
+                    'email_sent': email_sent
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -150,7 +168,18 @@ class AuthenticationViewSet(viewsets.ViewSet):
         if serializer.is_valid():
             user = serializer.validated_data['user']
             ip = self.get_client_ip(request)
-            
+
+            # Check if email is verified (mandatory in production, optional in development)
+            from django.conf import settings
+            if not user.is_verified and not settings.DEBUG:
+                return Response(
+                    {
+                        'error': _('Please verify your email address before logging in.'),
+                        'requires_verification': True
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             # Log successful login
             LoginLog.objects.create(
                 user=user,
@@ -158,22 +187,30 @@ class AuthenticationViewSet(viewsets.ViewSet):
                 user_agent=request.META.get('HTTP_USER_AGENT', ''),
                 success=True
             )
+
+            # Generate JWT tokens
+            from rest_framework_simplejwt.tokens import RefreshToken
+            refresh = RefreshToken.for_user(user)
             
             login(request, user)
             logger.info(f"User logged in: {user.email}")
-            
+
             return Response(
                 {
                     'message': _('Login successful.'),
-                    'user': UserSerializer(user).data
+                    'user': UserSerializer(user).data,
+                    'tokens': {
+                        'access': str(refresh.access_token),
+                        'refresh': str(refresh)
+                    },
+                    'is_verified': user.is_verified
                 },
                 status=status.HTTP_200_OK
             )
-        
+
         # Log failed login attempt
-        email = request.data.get('email')
-        if email:
-            try:
+        if email := request.data.get('email'):
+            with contextlib.suppress(User.DoesNotExist):
                 user = User.objects.get(email=email)
                 ip = self.get_client_ip(request)
                 LoginLog.objects.create(
@@ -183,9 +220,6 @@ class AuthenticationViewSet(viewsets.ViewSet):
                     success=False,
                     failure_reason='Invalid password'
                 )
-            except User.DoesNotExist:
-                pass
-        
         return Response(serializer.errors, status=status.HTTP_401_UNAUTHORIZED)
     
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
@@ -269,6 +303,75 @@ class AuthenticationViewSet(viewsets.ViewSet):
                 'count': logs.count(),
                 'results': serializer.data
             }
+        )
+    
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def verify_email(self, request):
+        """Verify user email with token."""
+        from django.utils.decorators import method_decorator
+        from django.views.decorators.csrf import csrf_exempt
+        
+        serializer = EmailVerificationSerializer(data=request.data)
+        if serializer.is_valid():
+            token = serializer.validated_data['token']
+            user = token.user
+            
+            # Mark token as used
+            token.is_used = True
+            token.save()
+            
+            # Mark user as verified
+            user.is_verified = True
+            user.save()
+            
+            # Send success email
+            send_verification_success_email(user)
+            
+            logger.info(f"Email verified for user: {user.email}")
+            
+            return Response(
+                {
+                    'message': _('Email verified successfully! You can now log in.'),
+                    'user': UserSerializer(user).data
+                },
+                status=status.HTTP_200_OK
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def resend_verification(self, request):
+        """Resend verification email."""
+        serializer = ResendVerificationSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.validated_data['email']
+            
+            # Use the utility function to resend
+            result = resend_verification_email(user)
+            
+            if result['success']:
+                logger.info(f"Verification email resent to: {user.email}")
+                return Response(
+                    {'message': result['message']},
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {'error': result['message']},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def verification_status(self, request):
+        """Get email verification status for current user."""
+        user = request.user
+        return Response(
+            {
+                'is_verified': user.is_verified,
+                'email': user.email,
+                'user': UserSerializer(user).data
+            },
+            status=status.HTTP_200_OK
         )
 
 

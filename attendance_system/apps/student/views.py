@@ -27,7 +27,7 @@ class CourseViewSet(viewsets.ModelViewSet):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
     permission_classes = [IsAuthenticated]
-    lookup_field = 'code'
+    lookup_field = 'pk'  # Changed from 'code' to 'pk' to use ID
     
     def get_queryset(self):
         """Filter courses based on user role."""
@@ -81,7 +81,7 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
             ).distinct()
         else:  # Student
             # Students can only see themselves
-            return StudentProfile.objects.filter(user=request.user)
+            return StudentProfile.objects.filter(user=self.request.user)
     
     def get_serializer_class(self):
         """Use different serializer for create."""
