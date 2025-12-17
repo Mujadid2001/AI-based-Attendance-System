@@ -50,7 +50,7 @@ class CourseViewSet(viewsets.ModelViewSet):
         return super().create(request, *args, **kwargs)
 
     @action(detail=True, methods=['get'])
-    def students(self, request, code=None):
+    def students(self, request, pk=None):
         """Get enrolled students for a course."""
         course = self.get_object()
         enrollments = course.enrollments.filter(is_active=True)
@@ -76,15 +76,8 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
         if self.request.user.is_admin():
             return StudentProfile.objects.all()
         elif self.request.user.is_teacher():
-            # Teachers can see students in their courses
-            from apps.student.models import Enrollment
-            course_ids = Course.objects.filter(
-                instructor=self.request.user
-            ).values_list('id', flat=True)
-            return StudentProfile.objects.filter(
-                enrollments__course_id__in=course_ids,
-                enrollments__is_active=True
-            ).distinct()
+            # Teachers can see all students
+            return StudentProfile.objects.all()
         else:  # Student
             # Students can only see themselves
             return StudentProfile.objects.filter(user=self.request.user)
@@ -168,15 +161,36 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
     queryset = Enrollment.objects.all()
     serializer_class = EnrollmentSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrTeacher]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Filter enrollments by student if provided."""
+        queryset = Enrollment.objects.all()
+        
+        # Students can only see their own enrollments
+        if self.request.user.is_student():
+            queryset = queryset.filter(student__user=self.request.user)
+        
+        # Filter by student_id if provided (for admin/teacher)
+        student_id = self.request.query_params.get('student')
+        if student_id and (self.request.user.is_admin() or self.request.user.is_teacher()):
+            queryset = queryset.filter(student__user_id=student_id)
+        
+        return queryset
 
     def create(self, request, *args, **kwargs):
+        """Enroll student in course (admin/teacher only)."""
+        if not request.user.is_admin() and not request.user.is_teacher():
+            return Response(
+                {'error': _('Permission denied.')},
+                status=status.HTTP_403_FORBIDDEN
+            )
         """Enroll student in course."""
         student_id = request.data.get('student')
         course_id = request.data.get('course')
 
         try:
-            student = StudentProfile.objects.get(id=student_id)
+            student = StudentProfile.objects.get(user_id=student_id)
             course = Course.objects.get(id=course_id)
         except StudentProfile.DoesNotExist:
             return Response(

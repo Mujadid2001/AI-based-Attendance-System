@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { IoAdd, IoCalendar, IoTime, IoPeople } from 'react-icons/io5';
 import { Card, Button, LoadingSpinner, Badge, Input } from '@components/ui';
 import { attendanceService, courseService } from '@services/index';
@@ -8,19 +8,27 @@ import type { AttendanceSession, Course } from '@/types';
 import toast from 'react-hot-toast';
 
 const Attendance = () => {
+  const location = useLocation();
+  const preselectedCourseId = location.state?.preselectedCourseId;
+  
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
-    course: '',
-    session_type: 'automatic',
+    course: preselectedCourseId || '',
+    date: new Date().toISOString().split('T')[0],
+    start_time: new Date().toTimeString().split(' ')[0].substring(0, 5),
     is_active: true,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     fetchData();
+    // Auto-open modal if preselected course
+    if (preselectedCourseId) {
+      setShowModal(true);
+    }
   }, []);
 
   const fetchData = async () => {
@@ -52,7 +60,8 @@ const Attendance = () => {
       setShowModal(false);
       setFormData({
         course: '',
-        session_type: 'automatic',
+        date: new Date().toISOString().split('T')[0],
+        start_time: new Date().toTimeString().split(' ')[0].substring(0, 5),
         is_active: true,
       });
     } catch (error: any) {
@@ -94,7 +103,9 @@ const Attendance = () => {
             <Link to={`/attendance/session/${session.id}`}>
               <Card hoverable>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">{session.course.name}</h3>
+                  <h3 className="font-semibold text-gray-900">
+                    {session.course_name || (typeof session.course === 'object' ? session.course.name : 'Unknown Course')}
+                  </h3>
                   {session.is_active ? (
                     <Badge variant="success" size="sm">Active</Badge>
                   ) : (
@@ -104,15 +115,15 @@ const Attendance = () => {
                 <div className="text-sm text-gray-600 space-y-2">
                   <div className="flex items-center">
                     <IoCalendar className="w-4 h-4 mr-2" />
-                    {new Date(session.start_time).toLocaleDateString()}
+                    {new Date(session.date).toLocaleDateString()}
                   </div>
                   <div className="flex items-center">
                     <IoTime className="w-4 h-4 mr-2" />
-                    {new Date(session.start_time).toLocaleTimeString()} - {session.end_time ? new Date(session.end_time).toLocaleTimeString() : 'Ongoing'}
+                    {session.start_time} {session.end_time ? `- ${session.end_time}` : '- Ongoing'}
                   </div>
                   <div className="flex items-center">
                     <IoPeople className="w-4 h-4 mr-2" />
-                    {session.session_type}
+                    {session.attendance_count || 0} Students
                   </div>
                 </div>
               </Card>
@@ -156,16 +167,27 @@ const Attendance = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Session Type
+                    Date
                   </label>
-                  <select
+                  <input
+                    type="date"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    value={formData.session_type}
-                    onChange={(e) => setFormData({ ...formData, session_type: e.target.value })}
-                  >
-                    <option value="automatic">Automatic (AI)</option>
-                    <option value="manual">Manual</option>
-                  </select>
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    value={formData.start_time}
+                    onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                    required
+                  />
                 </div>
                 <div className="flex items-center">
                   <input

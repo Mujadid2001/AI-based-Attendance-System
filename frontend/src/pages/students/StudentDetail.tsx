@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useParams, useHistory, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Card, LoadingSpinner, Badge, Button } from '@components/ui';
-import { IoPerson, IoMail, IoSchool, IoIdCard, IoCalendar, IoCheckmarkCircle, IoCloseCircle } from 'react-icons/io5';
-import { studentService } from '@services/index';
-import type { StudentProfile } from '@/types';
+import { IoPerson, IoMail, IoSchool, IoIdCard, IoCalendar, IoCheckmarkCircle, IoCloseCircle, IoArrowBack, IoCamera, IoBook } from 'react-icons/io5';
+import { studentService, courseService } from '@services/index';
+import type { StudentProfile, Enrollment, Course } from '@/types';
 import toast from 'react-hot-toast';
 
 const StudentDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const history = useHistory();
+  const navigate = useNavigate();
   const [student, setStudent] = useState<StudentProfile | null>(null);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingCourses, setLoadingCourses] = useState(false);
 
   useEffect(() => {
     fetchStudentDetails();
@@ -22,6 +25,33 @@ const StudentDetail = () => {
     try {
       const response = await studentService.getStudent(parseInt(id, 10));
       setStudent(response);
+      
+      // Fetch student enrollments
+      setLoadingCourses(true);
+      try {
+        console.log('Fetching enrollments for student ID:', id);
+        const enrollmentsData = await courseService.getStudentEnrollments(parseInt(id, 10));
+        console.log('Enrollments data:', enrollmentsData);
+        // Handle paginated response
+        const enrollmentsList = Array.isArray(enrollmentsData) ? enrollmentsData : enrollmentsData.results || [];
+        setEnrollments(enrollmentsList);
+        
+        // Fetch course details for each enrollment
+        if (enrollmentsList.length > 0) {
+          const courseIds = enrollmentsList.map(e => e.course);
+          console.log('Course IDs:', courseIds);
+          const coursePromises = courseIds.map(courseId => 
+            courseService.getCourse(courseId).catch(() => null)
+          );
+          const coursesData = await Promise.all(coursePromises);
+          console.log('Courses data:', coursesData);
+          setCourses(coursesData.filter(c => c !== null) as Course[]);
+        }
+      } catch (error) {
+        console.error('Failed to load enrollments:', error);
+      } finally {
+        setLoadingCourses(false);
+      }
     } catch (error) {
       toast.error('Failed to load student details.');
     } finally {
@@ -33,9 +63,9 @@ const StudentDetail = () => {
     if (!student) return;
     if (window.confirm('Are you sure you want to delete this student?')) {
       try {
-        await studentService.deleteStudent(student.id);
+        await studentService.deleteStudent(student.user.id);
         toast.success('Student deleted successfully.');
-        history.push('/students');
+        navigate('/students');
       } catch (error) {
         toast.error('Failed to delete student.');
       }
@@ -64,6 +94,12 @@ const StudentDetail = () => {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-8"
     >
+      {/* Back Button */}
+      <Button variant="secondary" onClick={() => navigate('/students')}>
+        <IoArrowBack className="w-5 h-5 mr-2" />
+        Back to Students
+      </Button>
+
       {/* Header */}
       <Card>
         <div className="flex items-center space-x-6">
@@ -82,9 +118,19 @@ const StudentDetail = () => {
             <h1 className="text-3xl font-bold text-gray-900">
               {student.user.first_name} {student.user.last_name}
             </h1>
-            <p className="text-gray-600">{student.student_id}</p>
+            <p className="text-gray-600">{student.roll_number}</p>
           </div>
           <div className="flex space-x-2">
+            <Link to={`/face-registration`} state={{ 
+              prefilledRollNumber: student.roll_number,
+              studentEmail: student.user.email,
+              studentName: `${student.user.first_name} ${student.user.last_name}`
+            }}>
+              <Button variant="secondary">
+                <IoCamera className="w-5 h-5 mr-2" />
+                Register Face
+              </Button>
+            </Link>
             <Link to={`/students/${id}/edit`}>
               <Button variant="outline">Edit</Button>
             </Link>
@@ -98,7 +144,7 @@ const StudentDetail = () => {
         <h2 className="text-2xl font-bold mb-6">Personal Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <DetailItem icon={IoMail} label="Email" value={student.user.email} />
-          <DetailItem icon={IoIdCard} label="Roll Number" value={student.student_id} />
+          <DetailItem icon={IoIdCard} label="Roll Number" value={student.roll_number} />
           <DetailItem icon={IoSchool} label="Department" value={student.department || 'N/A'} />
           <DetailItem icon={IoCalendar} label="Semester" value={student.semester || 'N/A'} />
         </div>
@@ -108,7 +154,7 @@ const StudentDetail = () => {
       <Card>
         <h2 className="text-2xl font-bold mb-6">Face Registration</h2>
         <div className="flex items-center space-x-4">
-          {student.face_registered ? (
+          {student.is_face_registered ? (
             <>
               <IoCheckmarkCircle className="w-12 h-12 text-green-600" />
               <div>
@@ -135,7 +181,62 @@ const StudentDetail = () => {
       {/* Enrolled Courses */}
       <Card>
         <h2 className="text-2xl font-bold mb-6">Enrolled Courses</h2>
-        <p className="text-gray-600">Enrolled courses section - Coming soon!</p>
+        {loadingCourses ? (
+          <div className="flex items-center justify-center py-8">
+            <LoadingSpinner />
+          </div>
+        ) : enrollments.length === 0 ? (
+          <div className="text-center py-8">
+            <IoBook className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-600">No courses enrolled yet.</p>
+          </div>
+        ) : courses.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-600 mb-4">Enrolled in {enrollments.length} course(s), but unable to load course details.</p>
+            <div className="space-y-2">
+              {enrollments.map((enrollment) => (
+                <div key={enrollment.id} className="p-4 border border-gray-200 rounded-lg">
+                  <p className="font-medium">Course ID: {enrollment.course}</p>
+                  <p className="text-sm text-gray-600">Course Code: {enrollment.course_code}</p>
+                  <p className="text-sm text-gray-600">Course Name: {enrollment.course_name}</p>
+                  <Badge variant={enrollment.is_active ? 'success' : 'warning'}>
+                    {enrollment.is_active ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {courses.map((course) => {
+              const enrollment = enrollments.find(e => e.course === course.id);
+              return (
+                <Link
+                  key={course.id}
+                  to={`/courses/${course.id}`}
+                  className="block p-4 border border-gray-200 rounded-lg hover:border-primary-500 hover:shadow-md transition-all"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-900 mb-1">
+                        {course.code}
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-2">{course.name}</p>
+                      <div className="flex items-center space-x-2 text-xs text-gray-500">
+                        <span>{course.semester} {course.year}</span>
+                        <span>•</span>
+                        <span>{course.instructor_name}</span>
+                      </div>
+                    </div>
+                    <Badge variant={enrollment?.is_active ? 'success' : 'warning'}>
+                      {enrollment?.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
       {/* Attendance History */}

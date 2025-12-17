@@ -21,7 +21,8 @@ class AttendanceSessionSerializer(serializers.ModelSerializer):
     )
     created_by_name = serializers.CharField(
         source='created_by.get_full_name',
-        read_only=True
+        read_only=True,
+        allow_null=True
     )
     duration_minutes = serializers.SerializerMethodField()
     attendance_count = serializers.SerializerMethodField()
@@ -33,7 +34,7 @@ class AttendanceSessionSerializer(serializers.ModelSerializer):
             'start_time', 'end_time', 'duration_minutes', 'created_by',
             'created_by_name', 'attendance_count', 'is_active', 'created_at'
         ]
-        read_only_fields = ['created_at']
+        read_only_fields = ['created_at', 'created_by']
     
     def get_duration_minutes(self, obj):
         return obj.get_duration_minutes()

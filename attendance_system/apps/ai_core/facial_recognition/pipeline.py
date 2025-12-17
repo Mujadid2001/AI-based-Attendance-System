@@ -35,8 +35,8 @@ except ImportError:
 class FacialRecognitionPipeline:
     """Orchestrator for facial recognition operations."""
     
-    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.6, storage=None, enable_quality_checks=True):
-        """Initialize pipeline."""
+    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.5, storage=None, enable_quality_checks=True):
+        """Initialize pipeline with lower confidence threshold for lower quality webcams."""
         self.confidence_threshold = confidence_threshold
         self.enable_quality_checks = enable_quality_checks
         
@@ -172,6 +172,7 @@ class FacialRecognitionPipeline:
             dict with recognition results
         """
         if not HAS_FACE_RECOGNITION or self.storage.count() == 0:
+            logger.warning(f"Recognition failed: HAS_FACE_RECOGNITION={HAS_FACE_RECOGNITION}, storage count={self.storage.count()}")
             return {
                 'success': False,
                 'error': 'No enrolled faces or recognition library unavailable',
@@ -216,6 +217,7 @@ class FacialRecognitionPipeline:
             
             if matches[best_match_index] and confidence >= self.confidence_threshold:
                 student_id = all_ids[best_match_index]
+                logger.info(f"Face recognized: student_id={student_id}, confidence={confidence:.2f}")
                 return {
                     'success': True,
                     'student_id': student_id,
@@ -224,9 +226,10 @@ class FacialRecognitionPipeline:
                     'face_detected': True
                 }
             else:
+                logger.warning(f"Recognition failed: best_confidence={confidence:.2f}, threshold={self.confidence_threshold}, match={matches[best_match_index]}")
                 return {
                     'success': False,
-                    'error': f'No match found (best confidence: {confidence:.2f})',
+                    'error': f'No match found (best confidence: {confidence:.2f}, required: {self.confidence_threshold})',
                     'face_detected': True,
                     'confidence': float(confidence),
                     'distance': float(best_distance)

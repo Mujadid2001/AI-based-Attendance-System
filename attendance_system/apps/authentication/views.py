@@ -18,7 +18,8 @@ from apps.authentication.serializers import (
 )
 from apps.authentication.models import LoginLog, EmailVerificationToken
 from apps.authentication.email_utils import (
-    send_verification_email, send_verification_success_email, resend_verification_email
+    send_verification_email, send_verification_success_email, resend_verification_email,
+    send_teacher_approval_email
 )
 from apps.authentication.permissions import IsAdmin
 from apps.student.models import StudentProfile
@@ -51,17 +52,22 @@ class AuthenticationViewSet(viewsets.ViewSet):
             token = EmailVerificationToken.objects.create(user=user)
             email_sent = send_verification_email(user, token)
             
-            logger.info(f"New user registered: {user.email}")
+            logger.info(f"New user registered: {user.email} (Role: {user.role}, Approved: {user.is_approved})")
             
-            message = _('Registration successful. Please check your email to verify your account.')
-            if not email_sent:
-                message = _('Registration successful, but verification email could not be sent. Please request a new verification email.')
+            # Different messages based on role and approval status
+            if user.role == User.Role.TEACHER and not user.is_approved:
+                message = _('Registration successful! Your teacher account is pending admin approval. You will receive an email notification once your account is reviewed and approved.')
+            else:
+                message = _('Registration successful. Please check your email to verify your account.')
+                if not email_sent:
+                    message = _('Registration successful, but verification email could not be sent. Please request a new verification email.')
             
             return Response(
                 {
                     'message': message,
                     'user': UserSerializer(user).data,
-                    'email_sent': email_sent
+                    'email_sent': email_sent,
+                    'requires_approval': user.role == User.Role.TEACHER and not user.is_approved
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -176,6 +182,16 @@ class AuthenticationViewSet(viewsets.ViewSet):
                     {
                         'error': _('Please verify your email address before logging in.'),
                         'requires_verification': True
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Check if teacher account is approved
+            if user.role == User.Role.TEACHER and not user.is_approved:
+                return Response(
+                    {
+                        'error': _('Your teacher account is pending admin approval. Please wait for approval to access the system.'),
+                        'requires_approval': True
                     },
                     status=status.HTTP_403_FORBIDDEN
                 )
@@ -398,6 +414,98 @@ class UserManagementViewSet(viewsets.ModelViewSet):
         user.save()
         logger.info(f"User activated: {user.email}")
         return Response({'message': _('User activated.')})
+    
+    @action(detail=True, methods=['post'])
+    def deactivate(self, request, pk=None):
+        """Deactivate user account."""
+        user = self.get_object()
+        user.is_active = False
+        user.save()
+        logger.info(f"User deactivated: {user.email}")
+        return Response({'message': _('User deactivated.')})
+    
+    @action(detail=True, methods=['post'])
+    def approve_teacher(self, request, pk=None):
+        """Approve a pending teacher account."""
+        user = self.get_object()
+        
+        if user.role != User.Role.TEACHER:
+            return Response(
+                {'error': _('User is not a teacher.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if user.is_approved:
+            return Response(
+                {'error': _('Teacher is already approved.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        user.is_approved = True
+        user.save()
+        
+        logger.info(f"Teacher approved: {user.email} by {request.user.email}")
+        
+        # Send approval notification email
+        email_sent = send_teacher_approval_email(user, approved_by=request.user)
+        
+        return Response({
+            'message': _('Teacher account approved successfully.'),
+            'user': UserSerializer(user).data,
+            'email_sent': email_sent
+        })
+    
+    @action(detail=True, methods=['post'])
+    def reject_teacher(self, request, pk=None):
+        """Reject a pending teacher account (delete)."""
+        user = self.get_object()
+        
+        if user.role != User.Role.TEACHER:
+            return Response(
+                {'error': _('User is not a teacher.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        email = user.email
+        user.delete()
+        
+        logger.info(f"Teacher rejected and deleted: {email} by {request.user.email}")
+        
+        # TODO: Send rejection notification email
+        
+        return Response({'message': _('Teacher account rejected and removed.')})
+    
+    @action(detail=False, methods=['get'])
+    def pending_teachers(self, request):
+        """Get list of teachers pending approval."""
+        pending = User.objects.filter(
+            role=User.Role.TEACHER,
+            is_approved=False
+        ).order_by('-created_at')
+        
+        serializer = UserSerializer(pending, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'])
+    def generate_teacher_code(self, request):
+        """Generate a new teacher verification code (deprecated - no longer used)."""
+        return Response(
+            {'error': _('Teacher verification codes are no longer used. Teachers must be approved by administrators.')},
+            status=status.HTTP_410_GONE
+        )
+        
+        return Response(
+            {'error': _('Teacher verification codes are no longer used. Teachers must be approved by administrators.')},
+            status=status.HTTP_410_GONE
+        )
+    
+    @action(detail=False, methods=['get'])
+    def verification_codes(self, request):
+        """Get list of all teacher verification codes (deprecated - no longer used)."""
+        return Response(
+            {'error': _('Teacher verification codes are no longer used. Teachers must be approved by administrators.')},
+            status=status.HTTP_410_GONE
+        )
     
     @action(detail=True, methods=['post'])
     def deactivate(self, request, pk=None):

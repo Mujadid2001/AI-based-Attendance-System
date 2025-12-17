@@ -23,7 +23,12 @@ export const studentService = {
 
   // Create student
   createStudent: async (data: any): Promise<StudentProfile> => {
-    const response = await api.post<StudentProfile>('/students/profiles/register_student/', data)
+    // Convert semester to number if it exists and is a string
+    const payload = {
+      ...data,
+      semester: data.semester ? parseInt(data.semester) : undefined
+    };
+    const response = await api.post<StudentProfile>('/students/profiles/register_student/', payload)
     return response.data
   },
 

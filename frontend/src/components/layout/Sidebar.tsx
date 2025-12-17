@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import clsx from 'clsx'
+import { useAuthStore } from '@store/authStore'
 import {
   IoGrid,
   IoPeople,
@@ -20,17 +21,23 @@ interface SidebarProps {
 
 const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
   const location = useLocation()
+  const { user } = useAuthStore()
 
   const menuItems = [
-    { path: '/dashboard', icon: IoGrid, label: 'Dashboard' },
-    { path: '/students', icon: IoPeople, label: 'Students' },
-    { path: '/courses', icon: IoBook, label: 'Courses' },
-    { path: '/attendance', icon: IoCalendar, label: 'Attendance' },
-    { path: '/face-recognition', icon: IoCamera, label: 'Face Recognition' },
-    { path: '/face-registration', icon: IoPersonAdd, label: 'Face Registration' },
-    { path: '/reports', icon: IoStatsChart, label: 'Reports' },
-    { path: '/settings', icon: IoSettings, label: 'Settings' },
+    { path: '/dashboard', icon: IoGrid, label: 'Dashboard', roles: ['admin', 'teacher', 'student'] },
+    { path: '/students', icon: IoPeople, label: 'Students', roles: ['admin', 'teacher'] },
+    { path: '/courses', icon: IoBook, label: 'Courses', roles: ['admin', 'teacher'] },
+    { path: '/attendance', icon: IoCalendar, label: 'Attendance', roles: ['admin', 'teacher'] },
+    { path: '/face-recognition', icon: IoCamera, label: 'Face Recognition', roles: ['admin', 'teacher'] },
+    { path: '/face-registration', icon: IoPersonAdd, label: 'Face Registration', roles: ['admin', 'teacher'] },
+    { path: '/reports', icon: IoStatsChart, label: 'Reports', roles: ['admin', 'teacher'] },
+    { path: '/settings', icon: IoSettings, label: 'Settings', roles: ['admin', 'teacher', 'student'] },
   ]
+
+  // Filter menu items based on user role
+  const filteredMenuItems = menuItems.filter(item => 
+    user && item.roles.includes(user.role)
+  )
 
   return (
     <motion.aside
@@ -66,7 +73,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
 
       {/* Navigation */}
       <nav className="p-4 space-y-2">
-        {menuItems.map((item) => {
+        {filteredMenuItems.map((item) => {
           const Icon = item.icon
           const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/')
 

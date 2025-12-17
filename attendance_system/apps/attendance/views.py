@@ -46,9 +46,10 @@ class AttendanceSessionViewSet(viewsets.ModelViewSet):
         if self.request.user.is_admin():
             return AttendanceSession.objects.all()
         elif self.request.user.is_teacher():
+            # Teachers can see sessions they created OR sessions for courses they teach
             return AttendanceSession.objects.filter(
-                course__instructor=self.request.user
-            )
+                Q(created_by=self.request.user) | Q(course__instructor=self.request.user)
+            ).distinct()
         else:  # Student
             # Students can see sessions for courses they're enrolled in
             return AttendanceSession.objects.filter(
@@ -56,6 +57,10 @@ class AttendanceSessionViewSet(viewsets.ModelViewSet):
                 course__enrollments__is_active=True
             ).distinct()
         return AttendanceSession.objects.none()
+    
+    def perform_create(self, serializer):
+        """Set created_by when creating a session."""
+        serializer.save(created_by=self.request.user)
     
     @action(detail=False, methods=['post'])
     def create_session(self, request):
@@ -111,6 +116,12 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     
     queryset = Attendance.objects.all()
     permission_classes = [IsAuthenticated, IsAdminOrTeacher]
+    
+    def get_permissions(self):
+        """Allow students to view their own attendance."""
+        if self.action in ['list', 'retrieve', 'my_attendance']:
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), IsAdminOrTeacher()]
     
     def get_serializer_class(self):
         """Use different serializer for create."""
@@ -207,9 +218,79 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             'attendances': serializer.data
         })
     
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def my_attendance(self, request):
+        """Get attendance stats for the logged-in student."""
+        if not request.user.is_student():
+            return Response(
+                {'error': _('This endpoint is only for students.')},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        try:
+            student = StudentProfile.objects.get(user=request.user)
+        except StudentProfile.DoesNotExist:
+            return Response(
+                {'error': _('Student profile not found.')},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get all attendance records
+        queryset = student.attendances.all().select_related('session', 'session__course')
+        
+        # Calculate overall statistics
+        total = queryset.count()
+        present = queryset.filter(status=Attendance.Status.PRESENT).count()
+        late = queryset.filter(status=Attendance.Status.LATE).count()
+        absent = queryset.filter(status=Attendance.Status.ABSENT).count()
+        percentage = ((present + late) / total * 100) if total > 0 else 0
+        
+        # Get enrolled courses with attendance stats
+        enrollments = student.enrollments.filter(is_active=True).select_related('course')
+        courses_stats = []
+        
+        for enrollment in enrollments:
+            course_attendances = queryset.filter(session__course=enrollment.course)
+            course_total = course_attendances.count()
+            course_present = course_attendances.filter(status=Attendance.Status.PRESENT).count()
+            course_late = course_attendances.filter(status=Attendance.Status.LATE).count()
+            course_percentage = ((course_present + course_late) / course_total * 100) if course_total > 0 else 0
+            
+            courses_stats.append({
+                'course_id': enrollment.course.id,
+                'course_code': enrollment.course.course_code,
+                'course_name': enrollment.course.course_name,
+                'total_sessions': course_total,
+                'present': course_present,
+                'late': course_late,
+                'absent': course_total - course_present - course_late,
+                'percentage': round(course_percentage, 2)
+            })
+        
+        # Get recent attendance records (last 10)
+        recent_records = queryset.order_by('-session__date', '-session__start_time')[:10]
+        serializer = AttendanceSerializer(recent_records, many=True)
+        
+        return Response({
+            'student': {
+                'roll_number': student.roll_number,
+                'name': student.user.get_full_name(),
+                'department': student.department
+            },
+            'overall_stats': {
+                'total': total,
+                'present': present,
+                'late': late,
+                'absent': absent,
+                'percentage': round(percentage, 2)
+            },
+            'courses': courses_stats,
+            'recent_records': serializer.data
+        })
+    
     @action(detail=False, methods=['get'])
     def student_attendance_history(self, request):
-        """Get attendance history for a student."""
+        """Get attendance history for a student (Admin/Teacher only)."""
         student_id = request.query_params.get('student')
         course_id = request.query_params.get('course')
         
@@ -381,9 +462,10 @@ class AttendanceReportViewSet(viewsets.ReadOnlyModelViewSet):
 # Helper endpoints
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminOrTeacher])
 def mark_attendance_by_face(request):
-    """Mark attendance using facial recognition."""
+    """Mark attendance using facial recognition (Admin/Teacher only)."""
     image_file = request.FILES.get('image')
     session_id = request.data.get('session_id')
     

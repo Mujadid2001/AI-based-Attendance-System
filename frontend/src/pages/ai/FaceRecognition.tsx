@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
-import { IoCamera, IoCheckmarkCircle, IoCloseCircle } from 'react-icons/io5'
+import { Link } from 'react-router-dom'
+import { IoCamera, IoCheckmarkCircle, IoCloseCircle, IoCalendar } from 'react-icons/io5'
 import { Card, Button, Badge } from '@components/ui'
 import { aiService } from '@services/index'
 import toast from 'react-hot-toast'
@@ -29,16 +30,32 @@ const FaceRecognition = () => {
 
       // Recognize face
       const result = await aiService.recognizeFace(file)
-      setRecognitionResult(result)
+      
+      // Transform API response to match UI expectations
+      const transformedResult = {
+        recognized: result.message === 'Face recognized successfully.',
+        student_name: result.student?.name || 'Unknown',
+        student_id: result.student?.roll_number || 'N/A',
+        confidence: Math.round((result.confidence || 0) * 100),
+        message: result.message || 'Recognition complete'
+      }
+      
+      setRecognitionResult(transformedResult)
 
-      if (result.recognized) {
-        toast.success(`Recognized: ${result.student_name}`)
+      if (transformedResult.recognized) {
+        toast.success(`Recognized: ${transformedResult.student_name}`)
       } else {
         toast.error('Face not recognized')
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Recognition failed')
-      setRecognitionResult(null)
+      console.error('Recognition error:', error)
+      const errorMsg = error.response?.data?.error || error.response?.data?.message || 'Recognition failed'
+      toast.error(errorMsg)
+      setRecognitionResult({
+        recognized: false,
+        message: errorMsg,
+        confidence: 0
+      })
     } finally {
       setIsProcessing(false)
     }
@@ -52,9 +69,17 @@ const FaceRecognition = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Face Recognition</h1>
-        <p className="text-gray-600 mt-1">Mark attendance using AI-powered face recognition</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Face Recognition</h1>
+          <p className="text-gray-600 mt-1">Mark attendance using AI-powered face recognition</p>
+        </div>
+        <Link to="/attendance">
+          <Button variant="secondary">
+            <IoCalendar className="w-5 h-5 mr-2" />
+            View Sessions
+          </Button>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -168,7 +193,7 @@ const FaceRecognition = () => {
                   </div>
                   
                   <div>
-                    <label className="text-sm font-medium text-gray-600">Student ID</label>
+                    <label className="text-sm font-medium text-gray-600">Roll Number</label>
                     <p className="text-lg font-semibold text-gray-900">
                       {recognitionResult.student_id}
                     </p>

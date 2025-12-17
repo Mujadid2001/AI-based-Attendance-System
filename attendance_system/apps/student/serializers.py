@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from apps.student.models import (
     StudentProfile, Course, Enrollment, StudentFaceImage
 )
-from apps.authentication.serializers import UserRegistrationSerializer
+from apps.authentication.serializers import UserRegistrationSerializer, UserSerializer
 
 User = get_user_model()
 
@@ -52,24 +52,13 @@ class StudentFaceImageSerializer(serializers.ModelSerializer):
 class StudentProfileSerializer(serializers.ModelSerializer):
     """Serializer for StudentProfile model."""
 
-    user_email = serializers.CharField(
-        source='user.email',
-        read_only=True
-    )
-    full_name = serializers.CharField(
-        source='user.get_full_name',
-        read_only=True
-    )
-    phone = serializers.CharField(
-        source='user.phone',
-        read_only=True
-    )
+    user = UserSerializer(read_only=True)
     face_images = StudentFaceImageSerializer(many=True, read_only=True)
 
     class Meta:
         model = StudentProfile
         fields = [
-            'user', 'user_email', 'full_name', 'phone', 'roll_number',
+            'user', 'roll_number',
             'department', 'semester', 'is_face_registered',
             'face_encoding_updated_at', 'is_active', 'registration_date',
             'face_images', 'created_at'
@@ -122,7 +111,10 @@ class StudentUserRegistrationSerializer(UserRegistrationSerializer):
     semester = serializers.IntegerField(required=False)
 
     class Meta(UserRegistrationSerializer.Meta):
-        fields = UserRegistrationSerializer.Meta.fields + [
+        # Exclude 'role' from fields - it will be set automatically to STUDENT
+        fields = [
+            'email', 'first_name', 'last_name', 'phone',
+            'password', 'password_confirm',
             'roll_number', 'department', 'semester'
         ]
 
@@ -136,6 +128,7 @@ class StudentUserRegistrationSerializer(UserRegistrationSerializer):
 
     def create(self, validated_data):
         """Create student user and profile."""
+        # Always set role to STUDENT - users cannot send this field
         validated_data['role'] = User.Role.STUDENT
         user = super().create(validated_data)
 

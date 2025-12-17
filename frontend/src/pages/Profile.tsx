@@ -25,7 +25,7 @@ const Profile = () => {
             <p className="text-gray-600">{user.email}</p>
           </div>
           <div className="flex-grow text-right">
-            <Link to={`/students/${user.id}/edit`}>
+            <Link to="/profile/edit">
               <Button variant="outline">
                 <IoPencil className="w-4 h-4 mr-2" />
                 Edit Profile

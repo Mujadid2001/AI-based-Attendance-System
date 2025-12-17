@@ -169,6 +169,11 @@ class AIServiceManager:
             # Ensure pipeline is initialized
             self._ensure_pipeline_initialized()
             
+            # Load all registered faces if storage is empty
+            if self._pipeline.storage.count() == 0:
+                logger.info("Storage empty, loading all registered student faces...")
+                self.load_all_student_faces()
+            
             # Import ImageProcessor
             from apps.ai_core.facial_recognition import ImageProcessor
             
@@ -191,7 +196,7 @@ class AIServiceManager:
                     user_id = int(result['student_id'])
                     student = StudentProfile.objects.get(user_id=user_id)
                     result['student'] = {
-                        'id': student.id,
+                        'id': student.user.id,
                         'roll_number': student.roll_number,
                         'name': student.user.get_full_name(),
                         'email': student.user.email
@@ -225,10 +230,11 @@ class AIServiceManager:
             for student in students:
                 encoding = student.get_face_embedding()
                 if encoding is not None:
-                    self._pipeline.known_encodings[str(student.user.id)] = encoding
+                    # Use storage API to add encoding
+                    self._pipeline.storage.add_encoding(str(student.user.id), encoding)
                     count += 1
             
-            logger.info(f"Loaded {count} student face encodings")
+            logger.info(f"Loaded {count} student face encodings into pipeline storage")
             return True
         except Exception as e:
             logger.error(f"Error loading student faces: {e}")

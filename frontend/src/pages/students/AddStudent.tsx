@@ -1,17 +1,20 @@
 import { useState } from 'react';
-import { useHistory } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Card, Button, Input } from '@components/ui';
 import { studentService } from '@services/index';
 import toast from 'react-hot-toast';
 
 const AddStudent = () => {
-  const history = useHistory();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
     email: '',
+    phone: '',
     roll_number: '',
+    department: '',
+    semester: '',
     password: '',
     password_confirm: '',
   });
@@ -31,9 +34,23 @@ const AddStudent = () => {
     try {
       await studentService.createStudent(formData);
       toast.success('Student added successfully');
-      history.push('/students');
-    } catch (error) {
-      toast.error('Failed to add student');
+      navigate('/students');
+    } catch (error: any) {
+      console.error('Student registration error:', error);
+      if (error.response?.data) {
+        // Display specific validation errors
+        const errors = error.response.data;
+        if (typeof errors === 'object') {
+          Object.keys(errors).forEach(key => {
+            const messages = Array.isArray(errors[key]) ? errors[key] : [errors[key]];
+            messages.forEach((msg: string) => toast.error(`${key}: ${msg}`));
+          });
+        } else {
+          toast.error('Failed to add student');
+        }
+      } else {
+        toast.error('Failed to add student');
+      }
     } finally {
       setLoading(false);
     }
@@ -78,12 +95,37 @@ const AddStudent = () => {
             required
           />
           <Input
+            label="Phone"
+            name="phone"
+            type="tel"
+            value={formData.phone}
+            onChange={handleChange}
+            placeholder="e.g., +92-300-1234567"
+          />
+          <Input
             label="Roll Number"
             name="roll_number"
             value={formData.roll_number}
             onChange={handleChange}
             required
           />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input
+              label="Department"
+              name="department"
+              value={formData.department}
+              onChange={handleChange}
+              placeholder="e.g., Computer Science"
+            />
+            <Input
+              label="Semester"
+              name="semester"
+              type="number"
+              value={formData.semester}
+              onChange={handleChange}
+              placeholder="e.g., 1, 2, 3..."
+            />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Input
               label="Password"

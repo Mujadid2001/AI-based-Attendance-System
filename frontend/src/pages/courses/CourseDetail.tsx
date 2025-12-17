@@ -10,11 +10,14 @@ import {
   IoCheckmarkCircle,
   IoCloseCircle,
   IoPersonAdd,
+  IoClose,
+  IoSearch,
+  IoTrash,
 } from 'react-icons/io5'
 import { Card, Button, LoadingSpinner, Badge } from '@components/ui'
 import { courseService, studentService } from '@services/index'
 import { useAuthStore } from '@store/authStore'
-import type { Course, StudentProfile } from '@/types'
+import type { Course, StudentProfile, Enrollment } from '@/types'
 import toast from 'react-hot-toast'
 
 const CourseDetail = () => {
@@ -23,8 +26,13 @@ const CourseDetail = () => {
   const { user } = useAuthStore()
   const [course, setCourse] = useState<Course | null>(null)
   const [students, setStudents] = useState<StudentProfile[]>([])
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const [loading, setLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [allStudents, setAllStudents] = useState<StudentProfile[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [enrolling, setEnrolling] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -62,6 +70,10 @@ const CourseDetail = () => {
     navigate(`/courses/${id}/edit`);
   }
 
+  const handleStartAttendance = () => {
+    navigate('/attendance', { state: { preselectedCourseId: course?.id } });
+  }
+
   const fetchCourseDetails = async () => {
     try {
       // Fetch course details
@@ -70,21 +82,27 @@ const CourseDetail = () => {
 
       // Fetch enrolled students if available
       try {
-        const enrollments = await courseService.getCourseEnrollments(Number(id))
+        const enrollmentsData = await courseService.getCourseEnrollments(Number(id))
+        setEnrollments(enrollmentsData)
         // Get student details for each enrollment
-        if (enrollments && enrollments.length > 0) {
-          const studentIds = enrollments.map((e: any) => e.student)
+        if (enrollmentsData && enrollmentsData.length > 0) {
+          const studentIds = enrollmentsData.map((e) => e.student)
           if (studentIds.length > 0) {
             const studentsData = await studentService.getStudents()
             const enrolledStudents = studentsData.results.filter((s: StudentProfile) =>
-              studentIds.includes(s.id)
+              studentIds.includes(s.user.id)
             )
             setStudents(enrolledStudents)
+          } else {
+            setStudents([])
           }
+        } else {
+          setStudents([])
         }
       } catch (error) {
         // Enrollments endpoint might not exist, just continue
         console.log('Could not fetch enrollments:', error)
+        setStudents([])
       }
     } catch (error: any) {
       console.error('Failed to load course:', error)
@@ -94,6 +112,61 @@ const CourseDetail = () => {
       setLoading(false)
     }
   }
+
+  const handleOpenAddModal = async () => {
+    setShowAddModal(true)
+    try {
+      const studentsData = await studentService.getStudents()
+      setAllStudents(studentsData.results)
+    } catch (error) {
+      toast.error('Failed to load students')
+    }
+  }
+
+  const handleEnrollStudent = async (studentId: number) => {
+    setEnrolling(true)
+    try {
+      await courseService.enrollStudent(Number(id), studentId)
+      toast.success('Student enrolled successfully')
+      setShowAddModal(false)
+      fetchCourseDetails() // Refresh the list
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to enroll student')
+    } finally {
+      setEnrolling(false)
+    }
+  }
+
+  const handleUnenrollStudent = async (studentUserId: number) => {
+    if (!window.confirm('Are you sure you want to remove this student from the course?')) {
+      return
+    }
+
+    try {
+      // Find the enrollment ID for this student
+      const enrollment = enrollments.find(e => e.student === studentUserId)
+      if (!enrollment) {
+        toast.error('Enrollment not found')
+        return
+      }
+
+      await courseService.unenrollStudent(enrollment.id)
+      toast.success('Student removed from course')
+      fetchCourseDetails() // Refresh the list
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to remove student')
+    }
+  }
+
+  const availableStudents = allStudents.filter(
+    (student) =>
+      !students.some((enrolled) => enrolled.user.id === student.user.id) &&
+      (searchTerm === '' ||
+        student.roll_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        `${student.user.first_name} ${student.user.last_name}`
+          .toLowerCase()
+          .includes(searchTerm.toLowerCase()))
+  )
 
   if (loading) {
     return (
@@ -166,6 +239,12 @@ const CourseDetail = () => {
         </Button>
         {(user?.role === 'admin' || user?.role === 'teacher') && (
           <div className="flex gap-3">
+            {course.is_active && (
+              <Button onClick={handleStartAttendance}>
+                <IoCalendar className="w-5 h-5 mr-2" />
+                Start Attendance
+              </Button>
+            )}
             <Button variant="secondary" onClick={handleEdit}>Edit Course</Button>
             {course.is_active ? (
               <Button variant="danger" onClick={handleToggleActive} isLoading={isUpdating}>
@@ -257,7 +336,7 @@ const CourseDetail = () => {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900">Enrolled Students</h2>
           {(user?.role === 'admin' || user?.role === 'teacher') && (
-            <Button size="sm">
+            <Button size="sm" onClick={handleOpenAddModal}>
               <IoPersonAdd className="w-4 h-4 mr-2" />
               Add Student
             </Button>
@@ -278,15 +357,18 @@ const CourseDetail = () => {
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Email</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
+                  {(user?.role === 'admin' || user?.role === 'teacher') && (
+                    <th className="text-right py-3 px-4 font-semibold text-gray-700">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {students.map((student) => (
-                  <tr key={student.id} className="border-b border-gray-100 hover:bg-gray-50">
+                  <tr key={student.user.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-3 px-4">{student.roll_number}</td>
                     <td className="py-3 px-4">
                       <Link
-                        to={`/students/${student.id}`}
+                        to={`/students/${student.user.id}`}
                         className="text-primary-600 hover:text-primary-700"
                       >
                         {student.user.first_name} {student.user.last_name}
@@ -298,6 +380,17 @@ const CourseDetail = () => {
                         Active
                       </Badge>
                     </td>
+                    {(user?.role === 'admin' || user?.role === 'teacher') && (
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          onClick={() => handleUnenrollStudent(student.user.id)}
+                          className="text-red-600 hover:text-red-800 transition-colors p-2 hover:bg-red-50 rounded"
+                          title="Remove student from course"
+                        >
+                          <IoTrash className="w-5 h-5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -305,6 +398,87 @@ const CourseDetail = () => {
           </div>
         )}
       </Card>
+
+      {/* Add Student Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b">
+              <h3 className="text-xl font-bold text-gray-900">Add Students to Course</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <IoClose className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="p-6 border-b">
+              <div className="relative">
+                <IoSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search by name or roll number..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            {/* Student List */}
+            <div className="p-6 max-h-96 overflow-y-auto">
+              {availableStudents.length === 0 ? (
+                <div className="text-center py-8">
+                  <IoPeople className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-600">
+                    {searchTerm ? 'No students found' : 'All students are already enrolled'}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {availableStudents.map((student) => (
+                    <div
+                      key={student.user.id}
+                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {student.user.first_name} {student.user.last_name}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Roll: {student.roll_number} • {student.department}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleEnrollStudent(student.user.id)}
+                        isLoading={enrolling}
+                      >
+                        <IoPersonAdd className="w-4 h-4 mr-1" />
+                        Enroll
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end gap-3 p-6 border-t">
+              <Button variant="secondary" onClick={() => setShowAddModal(false)}>
+                Close
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }

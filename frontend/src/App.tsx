@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import RoleBasedRoute from '@/components/RoleBasedRoute'
 
 // Pages
 import Login from '@pages/auth/Login'
@@ -21,6 +22,7 @@ import FaceRecognition from '@pages/ai/FaceRecognition'
 import FaceRegistration from '@pages/ai/FaceRegistration'
 import Reports from '@pages/reports/Reports'
 import Profile from '@pages/Profile'
+import EditProfile from '@pages/EditProfile'
 import Settings from '@pages/Settings'
 import NotFound from '@pages/NotFound'
 
@@ -39,30 +41,31 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           
-          {/* Student Management */}
-          <Route path="students" element={<Students />} />
-          <Route path="students/add" element={<AddStudent />} />
-          <Route path="students/:id" element={<StudentDetail />} />
-          <Route path="students/:id/edit" element={<EditStudent />} />
+          {/* Student Management - Admin/Teacher Only */}
+          <Route path="students" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><Students /></RoleBasedRoute>} />
+          <Route path="students/add" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><AddStudent /></RoleBasedRoute>} />
+          <Route path="students/:id" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><StudentDetail /></RoleBasedRoute>} />
+          <Route path="students/:id/edit" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><EditStudent /></RoleBasedRoute>} />
           
-          {/* Course Management */}
-          <Route path="courses" element={<Courses />} />
-          <Route path="courses/:id" element={<CourseDetail />} />
-          <Route path="courses/:id/edit" element={<EditCourse />} />
+          {/* Course Management - Admin/Teacher Only */}
+          <Route path="courses" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><Courses /></RoleBasedRoute>} />
+          <Route path="courses/:id" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><CourseDetail /></RoleBasedRoute>} />
+          <Route path="courses/:id/edit" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><EditCourse /></RoleBasedRoute>} />
           
-          {/* Attendance */}
-          <Route path="attendance" element={<Attendance />} />
-          <Route path="attendance/session/:id" element={<AttendanceSession />} />
+          {/* Attendance - Admin/Teacher Only */}
+          <Route path="attendance" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><Attendance /></RoleBasedRoute>} />
+          <Route path="attendance/session/:id" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><AttendanceSession /></RoleBasedRoute>} />
           
-          {/* AI Features */}
-          <Route path="face-recognition" element={<FaceRecognition />} />
-          <Route path="face-registration" element={<FaceRegistration />} />
+          {/* AI Features - Admin/Teacher Only */}
+          <Route path="face-recognition" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><FaceRecognition /></RoleBasedRoute>} />
+          <Route path="face-registration" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><FaceRegistration /></RoleBasedRoute>} />
           
-          {/* Reports */}
-          <Route path="reports" element={<Reports />} />
+          {/* Reports - Admin/Teacher Only */}
+          <Route path="reports" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><Reports /></RoleBasedRoute>} />
           
           {/* User */}
           <Route path="profile" element={<Profile />} />
+          <Route path="profile/edit" element={<EditProfile />} />
           <Route path="settings" element={<Settings />} />
         </Route>
 

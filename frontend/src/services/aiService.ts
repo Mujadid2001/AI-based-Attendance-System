@@ -2,17 +2,41 @@ import api from './api'
 import type { FaceRecognitionResult } from '@/types'
 
 export const aiService = {
-  // Face Registration
-  registerFace: async (studentId: number, images: File[]): Promise<void> => {
-    const formData = new FormData()
-    formData.append('student_id', studentId.toString())
-    images.forEach((image, index) => {
-      formData.append(`image_${index}`, image)
-    })
+  // Face Registration - sends images one by one
+  registerFace: async (rollNumber: string, images: File[]): Promise<void> => {
+    if (images.length === 0) {
+      throw new Error('No images provided')
+    }
 
-    await api.post('/ai/face-registration/', formData, {
+    if (images.length < 3) {
+      throw new Error('Minimum 3 images required')
+    }
+
+    if (images.length > 5) {
+      throw new Error('Maximum 5 images allowed')
+    }
+
+    // Send first image (primary registration)
+    const formData = new FormData()
+    formData.append('student_id', rollNumber)
+    formData.append('image', images[0])
+
+    const response = await api.post('/ai/face-registration/register-face/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
+
+    // Send remaining images for additional training data
+    for (let i = 1; i < images.length; i++) {
+      const additionalData = new FormData()
+      additionalData.append('student_id', rollNumber)
+      additionalData.append('image', images[i])
+
+      await api.post('/ai/face-registration/register-face/', additionalData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+    }
+
+    return response.data
   },
 
   // Update face encoding
@@ -38,7 +62,7 @@ export const aiService = {
     formData.append('image', imageFile)
 
     const response = await api.post<FaceRecognitionResult>(
-      '/ai/face-recognition/recognize/',
+      '/ai/face-recognition/recognize-only/',
       formData,
       {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -83,7 +107,7 @@ export const aiService = {
     const formData = new FormData()
     formData.append('image', imageFile)
 
-    const response = await api.post('/ai/face-recognition/test_detection/', formData, {
+    const response = await api.post('/ai/face-recognition/test-detection/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     return response.data

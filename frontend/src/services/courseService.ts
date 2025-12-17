@@ -38,7 +38,7 @@ export const courseService = {
 
   // Get course enrollments
   getCourseEnrollments: async (courseId: number): Promise<Enrollment[]> => {
-    const response = await api.get<Enrollment[]>(`/students/courses/${courseId}/enrollments/`)
+    const response = await api.get<Enrollment[]>(`/students/courses/${courseId}/students/`)
     return response.data
   },
 

@@ -269,3 +269,144 @@ def resend_verification_email(user):
             'success': False,
             'message': 'Failed to send verification email. Please try again.'
         }
+
+
+def send_teacher_approval_email(user, approved_by=None):
+    """
+    Send approval notification email to teacher.
+    
+    Args:
+        user: User instance (teacher)
+        approved_by: User instance (admin who approved), optional
+    
+    Returns:
+        bool: True if email sent successfully, False otherwise
+    """
+    try:
+        subject = 'Teacher Account Approved - AI Attendance System'
+        
+        frontend_url = get_frontend_url()
+        login_link = f"{frontend_url}/login"
+        
+        approver_name = approved_by.get_full_name() if approved_by else "Administrator"
+        
+        html_message = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #10b981; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+                .content {{ padding: 30px; background-color: #f9fafb; border: 1px solid #e5e7eb; }}
+                .success-icon {{ font-size: 48px; text-align: center; margin: 20px 0; }}
+                .button {{
+                    display: inline-block;
+                    padding: 14px 32px;
+                    margin: 25px 0;
+                    background-color: #2563eb;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 6px;
+                    font-weight: bold;
+                    text-align: center;
+                }}
+                .button:hover {{ background-color: #1d4ed8; }}
+                .info-box {{ 
+                    background-color: #dbeafe; 
+                    border-left: 4px solid #2563eb; 
+                    padding: 15px; 
+                    margin: 20px 0;
+                    border-radius: 4px;
+                }}
+                .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #6b7280; border-top: 1px solid #e5e7eb; }}
+                .highlight {{ color: #2563eb; font-weight: bold; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1 style="margin: 0;">🎉 Account Approved!</h1>
+                </div>
+                <div class="content">
+                    <div class="success-icon">✅</div>
+                    
+                    <h2 style="color: #10b981; text-align: center;">Welcome to AI Attendance System</h2>
+                    
+                    <p>Dear <strong>{user.get_full_name()}</strong>,</p>
+                    
+                    <p>Great news! Your teacher account has been approved by <span class="highlight">{approver_name}</span>.</p>
+                    
+                    <div class="info-box">
+                        <strong>📧 Email:</strong> {user.email}<br>
+                        <strong>👤 Role:</strong> Teacher<br>
+                        <strong>✓ Status:</strong> Active
+                    </div>
+                    
+                    <p>You now have full access to the AI Attendance System and can:</p>
+                    <ul>
+                        <li>✓ Manage student attendance</li>
+                        <li>✓ Use AI-powered face recognition</li>
+                        <li>✓ Create and manage courses</li>
+                        <li>✓ Generate attendance reports</li>
+                        <li>✓ Monitor student performance</li>
+                    </ul>
+                    
+                    <div style="text-align: center;">
+                        <a href="{login_link}" class="button">Login to Your Account</a>
+                    </div>
+                    
+                    <p style="margin-top: 25px; font-size: 14px; color: #6b7280;">
+                        If you have any questions or need assistance, please don't hesitate to contact the system administrator.
+                    </p>
+                </div>
+                <div class="footer">
+                    <p>© 2025 AI Attendance System. All rights reserved.</p>
+                    <p>This is an automated message, please do not reply to this email.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        plain_message = f"""
+        Hello {user.get_full_name()},
+        
+        Great news! Your teacher account has been approved by {approver_name}.
+        
+        Account Details:
+        - Email: {user.email}
+        - Role: Teacher
+        - Status: Active
+        
+        You now have full access to the AI Attendance System.
+        
+        Login here: {login_link}
+        
+        Features you can access:
+        - Manage student attendance
+        - Use AI-powered face recognition
+        - Create and manage courses
+        - Generate attendance reports
+        - Monitor student performance
+        
+        If you have any questions, please contact the system administrator.
+        
+        © 2025 AI Attendance System. All rights reserved.
+        """
+        
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+        
+        logger.info(f"Teacher approval email sent to {user.email}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send teacher approval email to {user.email}: {e}")
+        return False

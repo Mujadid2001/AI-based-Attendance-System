@@ -30,10 +30,10 @@ class FaceQualityChecker:
     """Utility class for checking face image quality."""
     
     # Quality thresholds
-    MIN_BLUR_THRESHOLD = 100.0  # Laplacian variance threshold
-    MIN_BRIGHTNESS = 40  # Minimum average brightness
-    MAX_BRIGHTNESS = 220  # Maximum average brightness
-    MIN_FACE_SIZE = (80, 80)  # Minimum face dimensions
+    MIN_BLUR_THRESHOLD = 15.0  # Laplacian variance threshold
+    MIN_BRIGHTNESS = 30  # Minimum average brightness
+    MAX_BRIGHTNESS = 230  # Maximum average brightness
+    MIN_FACE_SIZE = (60, 60)  # Minimum face dimensions
     MAX_FACE_SIZE = (800, 800)  # Maximum face dimensions
     
     @staticmethod

@@ -19,13 +19,14 @@ logger = logging.getLogger(__name__)
 class FaceRegistrationViewSet(viewsets.ViewSet):
     """ViewSet for face registration operations."""
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrTeacher]
     
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='register-face')
     def register_face(self, request):
         """
         Register student face.
-        Student can register their own face, admin/teacher can register for others.
+        Only admin/teacher can register faces for students.
+        Accepts one image at a time. Call multiple times for multiple images (max 5).
         """
         image_file = request.FILES.get('image')
         student_id = request.data.get('student_id')
@@ -36,20 +37,35 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Validate image file size (max 5MB)
+        if image_file.size > 5 * 1024 * 1024:
+            return Response(
+                {'error': _('Image file size must be less than 5MB.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         try:
-            # Determine which student to register
-            if request.user.is_student():
-                student = StudentProfile.objects.get(user=request.user)
-            else:
-                if not student_id:
-                    return Response(
-                        {'error': _('student_id is required for admin/teacher.')},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-                student = StudentProfile.objects.get(id=student_id)
+            # Only admin/teacher can register faces
+            if not student_id:
+                return Response(
+                    {'error': _('student_id (roll number) is required.')},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            # student_id is actually the roll_number from frontend
+            student = StudentProfile.objects.get(roll_number=student_id)
+                
+            # Check maximum images limit (5 images)
+            from apps.student.models import StudentFaceImage
+            existing_images = StudentFaceImage.objects.filter(student=student).count()
+            if existing_images >= 5:
+                return Response(
+                    {'error': _('Maximum 5 face images allowed per student.')},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
         except StudentProfile.DoesNotExist:
             return Response(
-                {'error': _('Student not found.')},
+                {'error': _('Student not found. Please check the roll number.')},
                 status=status.HTTP_404_NOT_FOUND
             )
         
@@ -59,7 +75,10 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
         
         if result['success']:
             return Response(
-                {'message': result['message']},
+                {
+                    'message': result['message'],
+                    'images_count': StudentFaceImage.objects.filter(student=student).count()
+                },
                 status=status.HTTP_200_OK
             )
         else:
@@ -72,12 +91,13 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
 class FaceRecognitionViewSet(viewsets.ViewSet):
     """ViewSet for face recognition and attendance marking."""
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrTeacher]
     
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='recognize-and-mark-attendance')
     def recognize_and_mark_attendance(self, request):
         """
         Recognize student face and automatically mark attendance.
+        Only admin/teacher can mark attendance.
         """
         image_file = request.FILES.get('image')
         session_id = request.data.get('session_id')
@@ -165,7 +185,7 @@ class FaceRecognitionViewSet(viewsets.ViewSet):
             status=status.HTTP_201_CREATED
         )
     
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='recognize-only')
     def recognize_only(self, request):
         """
         Only recognize face without marking attendance.
@@ -209,7 +229,7 @@ class AIConfigurationViewSet(viewsets.ViewSet):
             self.permission_denied(request)
         super().check_permissions(request)
     
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='set-confidence-threshold')
     def set_confidence_threshold(self, request):
         """Set face recognition confidence threshold."""
         threshold = request.data.get('threshold')
@@ -237,7 +257,7 @@ class AIConfigurationViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
     
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='load-training-data')
     def load_training_data(self, request):
         """Load all student faces into recognition pipeline."""
         ai_manager = get_ai_manager()
@@ -252,7 +272,7 @@ class AIConfigurationViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
     
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], url_path='save-training-data')
     def save_training_data(self, request):
         """Save current training data to disk."""
         ai_manager = get_ai_manager()

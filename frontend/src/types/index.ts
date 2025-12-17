@@ -8,6 +8,7 @@ export interface User {
   role: 'admin' | 'teacher' | 'student'
   is_email_verified: boolean
   profile_picture?: string
+  phone?: string
   created_at: string
   updated_at: string
 }
@@ -39,17 +40,15 @@ export interface AuthResponse {
 
 // Student Types
 export interface StudentProfile {
-  id: number
   user: User
-  student_id: string
-  date_of_birth?: string
-  phone_number?: string
-  address?: string
-  enrollment_date: string
-  face_registered: boolean
-  face_encoding?: string
+  roll_number: string
+  department?: string
+  semester?: number
+  is_face_registered: boolean
+  face_encoding_updated_at?: string
+  is_active: boolean
+  registration_date: string
   created_at: string
-  updated_at: string
 }
 
 // Course Types
@@ -58,36 +57,45 @@ export interface Course {
   code: string
   name: string
   description?: string
-  instructor: User
+  instructor: number
+  instructor_name: string
+  max_students: number
+  student_count: number
+  is_full: boolean
   semester: string
   year: number
-  credits: number
   is_active: boolean
+  start_date: string
+  end_date: string
   created_at: string
-  updated_at: string
 }
 
 export interface Enrollment {
   id: number
-  student: StudentProfile
-  course: Course
-  enrolled_date: string
-  status: 'active' | 'completed' | 'dropped'
+  student: number
+  student_roll: string
+  course: number
+  course_code: string
+  course_name: string
+  is_active: boolean
+  enrollment_date: string
 }
 
 // Attendance Types
 export interface AttendanceSession {
   id: number
-  course: Course
+  course: number | Course
+  course_code?: string
+  course_name?: string
   date: string
   start_time: string
   end_time?: string
-  session_type: 'lecture' | 'lab' | 'tutorial'
   is_active: boolean
-  location?: string
-  notes?: string
-  created_by: User
+  created_by?: User | number
+  created_by_name?: string
   created_at: string
+  attendance_count?: number
+  duration_minutes?: number
 }
 
 export interface AttendanceRecord {

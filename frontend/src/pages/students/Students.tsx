@@ -19,8 +19,10 @@ const Students = () => {
   const fetchStudents = async () => {
     try {
       const response = await studentService.getStudents()
-      setStudents(response.results)
+      console.log('Students API response:', response)
+      setStudents(response.results || response || [])
     } catch (error) {
+      console.error('Failed to load students:', error)
       toast.error('Failed to load students')
     } finally {
       setLoading(false)
@@ -31,7 +33,7 @@ const Students = () => {
     (student) =>
       student.user.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.user.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      student.student_id.toLowerCase().includes(searchTerm.toLowerCase())
+      student.roll_number.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   if (loading) {
@@ -50,12 +52,19 @@ const Students = () => {
           <h1 className="text-3xl font-bold text-gray-900">Students</h1>
           <p className="text-gray-600 mt-1">Manage student profiles and information</p>
         </div>
-        <Link to="/students/add">
-          <Button>
-            <IoAdd className="w-5 h-5 mr-2" />
-            Add Student
-          </Button>
-        </Link>
+        <div className="flex gap-3">
+          <Link to="/face-registration">
+            <Button variant="secondary">
+              Register Faces
+            </Button>
+          </Link>
+          <Link to="/students/add">
+            <Button>
+              <IoAdd className="w-5 h-5 mr-2" />
+              Add Student
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search */}
@@ -72,12 +81,12 @@ const Students = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredStudents.map((student, index) => (
           <motion.div
-            key={student.id}
+            key={student.user.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
           >
-            <Link to={`/students/${student.id}`}>
+            <Link to={`/students/${student.user.id}`}>
               <Card hoverable>
                 <div className="flex items-center gap-4 mb-4">
                   {student.user.profile_picture ? (
@@ -95,12 +104,12 @@ const Students = () => {
                     <h3 className="font-semibold text-gray-900">
                       {student.user.first_name} {student.user.last_name}
                     </h3>
-                    <p className="text-sm text-gray-600">{student.student_id}</p>
+                    <p className="text-sm text-gray-600">{student.roll_number}</p>
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">{student.user.email}</span>
-                  {student.face_registered ? (
+                  {student.is_face_registered ? (
                     <Badge variant="success" size="sm">Face Registered</Badge>
                   ) : (
                     <Badge variant="warning" size="sm">No Face Data</Badge>

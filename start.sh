@@ -20,16 +20,17 @@ NC='\033[0m' # No Color
 # Check if ports are available
 echo -e "${YELLOW}Checking ports...${NC}"
 
+# Kill any processes on ports 8000 and 3000
 if lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${RED}[ERROR] Port 8000 is already in use${NC}"
-    echo "Kill the process with: kill \$(lsof -t -i:8000)"
-    exit 1
+    echo -e "${YELLOW}[WARNING] Port 8000 is in use. Attempting to kill...${NC}"
+    npx kill-port 8000
+    sleep 1
 fi
 
 if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${RED}[ERROR] Port 3000 is already in use${NC}"
-    echo "Kill the process with: kill \$(lsof -t -i:3000)"
-    exit 1
+    echo -e "${YELLOW}[WARNING] Port 3000 is in use. Attempting to kill...${NC}"
+    npx kill-port 3000
+    sleep 1
 fi
 
 echo -e "${GREEN}[OK] Ports 8000 and 3000 are available${NC}"

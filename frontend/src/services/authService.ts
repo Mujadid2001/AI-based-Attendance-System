@@ -52,7 +52,7 @@ export const authService = {
 
   // Verify email
   verifyEmail: async (data: { token: string }): Promise<AuthResponse> => {
-    const response = await api.post<AuthResponse>('/auth/authentication/verify_email/', data)
+    const response = await api.post<AuthResponse>('/auth/authentication/verify-email/', data)
     return response.data
   },
 
@@ -78,7 +78,7 @@ export const authService = {
   updateProfile: async (data: Partial<User>): Promise<User> => {
     // Remove role-related fields to prevent privilege escalation
     const sanitizedData = removeRoleFields(sanitizeObject(data))
-    const response = await api.patch<User>('/auth/users/me/', sanitizedData)
+    const response = await api.put<User>('/auth/authentication/profile-update/', sanitizedData)
     return response.data
   },
 }

@@ -53,14 +53,22 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Create new user."""
-        return User.objects.create_user(
+        role = validated_data.get('role', User.Role.STUDENT)
+        
+        # Teachers always require admin approval
+        is_approved = False if role == User.Role.TEACHER else True
+        
+        user = User.objects.create_user(
             email=validated_data['email'],
             first_name=validated_data['first_name'],
             last_name=validated_data['last_name'],
             phone=validated_data.get('phone'),
-            role=validated_data.get('role', User.Role.STUDENT),
+            role=role,
             password=validated_data['password'],
+            is_approved=is_approved,
         )
+        
+        return user
         
 
 

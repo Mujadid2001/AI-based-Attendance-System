@@ -130,6 +130,36 @@ export const attendanceService = {
     return response.data
   },
 
+  // Get student's own attendance (for student role)
+  getMyAttendance: async (): Promise<{
+    student: {
+      roll_number: string
+      name: string
+      department: string
+    }
+    overall_stats: {
+      total: number
+      present: number
+      late: number
+      absent: number
+      percentage: number
+    }
+    courses: Array<{
+      course_id: number
+      course_code: string
+      course_name: string
+      total_sessions: number
+      present: number
+      late: number
+      absent: number
+      percentage: number
+    }>
+    recent_records: AttendanceRecord[]
+  }> => {
+    const response = await api.get('/attendance/records/my_attendance/')
+    return response.data
+  },
+
   // Reports
   getAttendanceReport: async (params: {
     course?: number

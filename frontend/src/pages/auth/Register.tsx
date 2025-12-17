@@ -21,15 +21,50 @@ const Register = () => {
   } = useForm<RegisterData>()
 
   const password = watch('password')
+  const selectedRole = watch('role')
 
   const onSubmit = async (data: RegisterData) => {
     setIsLoading(true)
     try {
-      await authService.register(data)
-      toast.success('Registration successful! Please check your email to verify your account.')
+      const response = await authService.register(data)
+      
+      if (response.requires_approval) {
+        toast.success('Registration successful! Your teacher account is pending admin approval. You will be notified once approved.')
+      } else {
+        toast.success('Registration successful! Please check your email to verify your account.')
+      }
+      
       navigate('/login')
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Registration failed')
+      console.error('Registration error:', error)
+      
+      // Handle different error formats
+      const errorData = error.response?.data
+      let errorMessage = 'Registration failed'
+      
+      if (errorData) {
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (errorData.message) {
+          errorMessage = errorData.message
+        } else if (errorData.error) {
+          errorMessage = errorData.error
+        } else if (errorData.detail) {
+          errorMessage = errorData.detail
+        } else {
+          // Handle field-specific errors
+          const errors = Object.entries(errorData)
+            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+            .join('; ')
+          if (errors) {
+            errorMessage = errors
+          }
+        }
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      toast.error(errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -175,10 +210,15 @@ const Register = () => {
               >
                 <option value="">Select a role</option>
                 <option value="student">Student</option>
-                <option value="teacher">Teacher</option>
+                <option value="teacher">Teacher (Requires Admin Approval)</option>
               </select>
               {errors.role && (
                 <p className="text-sm text-red-600">{errors.role.message}</p>
+              )}
+              {selectedRole === 'teacher' && (
+                <p className="text-xs text-amber-600 mt-2">
+                  ⚠️ Teacher accounts require admin approval. You will be notified once your account is reviewed.
+                </p>
               )}
             </div>
 

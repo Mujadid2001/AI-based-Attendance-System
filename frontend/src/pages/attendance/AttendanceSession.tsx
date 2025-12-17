@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useHistory } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Card, LoadingSpinner, Badge, Button } from '@components/ui';
 import { IoArrowBack, IoCheckmarkCircle, IoCloseCircle, IoHelpCircle } from 'react-icons/io5';
@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 
 const AttendanceSessionDetail = () => {
   const { id } = useParams<{ id: string }>();
-  const history = useHistory();
+  const navigate = useNavigate();
   const [session, setSession] = useState<AttendanceSession | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [students, setStudents] = useState<StudentProfile[]>([]);
@@ -83,7 +83,7 @@ const AttendanceSessionDetail = () => {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-8"
     >
-      <Button variant="secondary" onClick={() => history.push('/attendance')}>
+      <Button variant="secondary" onClick={() => navigate('/attendance')}>
         <IoArrowBack className="w-5 h-5 mr-2" />
         Back to Sessions
       </Button>

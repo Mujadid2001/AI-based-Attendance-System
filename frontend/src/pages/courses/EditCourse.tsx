@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useHistory } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Card, Button, Input, LoadingSpinner } from '@components/ui';
 import { courseService } from '@services/index';
@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 
 const EditCourse = () => {
   const { id } = useParams<{ id: string }>();
-  const history = useHistory();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -63,7 +63,7 @@ const EditCourse = () => {
     try {
       await courseService.updateCourse(parseInt(id, 10), formData);
       toast.success('Course details updated successfully.');
-      history.push(`/courses/${id}`);
+      navigate(`/courses/${id}`);
     } catch (error) {
       toast.error('Failed to update course details.');
     } finally {

@@ -78,6 +78,10 @@ class User(AbstractUser):
         default=False,
         help_text=_('Email verification status')
     )
+    is_approved = models.BooleanField(
+        default=True,
+        help_text=_('Account approved by admin (for teachers)')
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     last_login_at = models.DateTimeField(blank=True, null=True)

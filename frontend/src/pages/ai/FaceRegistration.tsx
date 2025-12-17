@@ -1,23 +1,76 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { IoCamera, IoCloudUpload, IoTrash, IoCheckmark } from 'react-icons/io5'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { IoCamera, IoCloudUpload, IoTrash, IoCheckmark, IoArrowBack } from 'react-icons/io5'
 import { Card, Button, Input } from '@components/ui'
 import { aiService } from '@services/index'
 import toast from 'react-hot-toast'
 import Webcam from 'react-webcam'
 
+const MAX_IMAGES = 5
+
 const FaceRegistration = () => {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const prefilledRollNumber = location.state?.prefilledRollNumber || ''
+  const studentEmail = location.state?.studentEmail || ''
+  const studentName = location.state?.studentName || ''
+  
   const webcamRef = useRef<Webcam>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [studentId, setStudentId] = useState('')
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [studentId, setStudentId] = useState(prefilledRollNumber)
   const [capturedImages, setCapturedImages] = useState<string[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const isPrefilledStudent = Boolean(prefilledRollNumber)
+
+  useEffect(() => {
+    if (prefilledRollNumber) {
+      setStudentId(prefilledRollNumber)
+    }
+  }, [prefilledRollNumber])
+
+  // Draw face guide overlay
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    // Draw oval guide
+    const centerX = canvas.width / 2
+    const centerY = canvas.height / 2
+    const radiusX = canvas.width * 0.25
+    const radiusY = canvas.height * 0.35
+
+    ctx.strokeStyle = '#10b981'
+    ctx.lineWidth = 3
+    ctx.setLineDash([10, 5])
+    ctx.beginPath()
+    ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
+    ctx.stroke()
+
+    // Draw text guide
+    ctx.fillStyle = '#10b981'
+    ctx.font = 'bold 18px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('Position your face within this guide', centerX, 40)
+  }, [])
 
   const captureImage = useCallback(() => {
+    if (capturedImages.length >= MAX_IMAGES) {
+      toast.error(`Maximum ${MAX_IMAGES} images allowed`)
+      return
+    }
+
     const imageSrc = webcamRef.current?.getScreenshot()
     if (imageSrc) {
       setCapturedImages((prev) => [...prev, imageSrc])
-      toast.success(`Image ${capturedImages.length + 1} captured`)
+      toast.success(`Image ${capturedImages.length + 1} of ${MAX_IMAGES} captured`)
     }
   }, [capturedImages.length])
 
@@ -29,27 +82,48 @@ const FaceRegistration = () => {
     const files = e.target.files
     if (!files) return
 
-    Array.from(files).forEach((file) => {
+    const remainingSlots = MAX_IMAGES - capturedImages.length
+    if (remainingSlots <= 0) {
+      toast.error(`Maximum ${MAX_IMAGES} images allowed`)
+      return
+    }
+
+    const filesToProcess = Array.from(files).slice(0, remainingSlots)
+    
+    filesToProcess.forEach((file) => {
       const reader = new FileReader()
       reader.onload = (e) => {
         if (e.target?.result) {
-          setCapturedImages((prev) => [...prev, e.target!.result as string])
+          setCapturedImages((prev) => {
+            if (prev.length < MAX_IMAGES) {
+              return [...prev, e.target!.result as string]
+            }
+            return prev
+          })
         }
       }
       reader.readAsDataURL(file)
     })
 
-    toast.success(`${files.length} image(s) uploaded`)
+    toast.success(`${filesToProcess.length} image(s) uploaded`)
+    if (files.length > remainingSlots) {
+      toast.error(`Only ${remainingSlots} slots available. Extra images ignored.`)
+    }
   }
 
   const registerFace = async () => {
     if (!studentId) {
-      toast.error('Please enter a student ID')
+      toast.error('Please enter a roll number')
       return
     }
 
     if (capturedImages.length < 3) {
       toast.error('Please capture at least 3 images for better accuracy')
+      return
+    }
+
+    if (capturedImages.length > MAX_IMAGES) {
+      toast.error(`Maximum ${MAX_IMAGES} images allowed`)
       return
     }
 
@@ -64,14 +138,21 @@ const FaceRegistration = () => {
         })
       )
 
-      await aiService.registerFace(parseInt(studentId), files)
+      await aiService.registerFace(studentId, files)
       toast.success('Face registered successfully!')
       
       // Reset form
       setStudentId('')
       setCapturedImages([])
+      
+      // Navigate back if came from student detail
+      if (prefilledRollNumber) {
+        setTimeout(() => navigate(-1), 1500)
+      }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Registration failed')
+      console.error('Face registration error:', error)
+      const errorMsg = error.response?.data?.error || error.response?.data?.message || 'Registration failed'
+      toast.error(errorMsg)
     } finally {
       setIsProcessing(false)
     }
@@ -80,16 +161,30 @@ const FaceRegistration = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Face Registration</h1>
-        <p className="text-gray-600 mt-1">Register student faces for attendance recognition</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Face Registration</h1>
+          {isPrefilledStudent ? (
+            <p className="text-gray-600 mt-1">
+              Registering face for: <span className="font-semibold text-gray-900">{studentName}</span> ({studentEmail})
+            </p>
+          ) : (
+            <p className="text-gray-600 mt-1">Register student faces for attendance recognition</p>
+          )}
+        </div>
+        {isPrefilledStudent && (
+          <Button variant="secondary" onClick={() => navigate(-1)}>
+            <IoArrowBack className="w-5 h-5 mr-2" />
+            Back to Student
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Camera View */}
         <Card className="lg:col-span-2">
           <h2 className="text-xl font-semibold mb-4">Camera</h2>
-          <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden mb-4">
+          <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden mb-4 relative">
             <Webcam
               ref={webcamRef}
               audio={false}
@@ -97,17 +192,29 @@ const FaceRegistration = () => {
               className="w-full h-full object-cover"
               mirrored
             />
+            {/* Face guide overlay */}
+            <canvas
+              ref={canvasRef}
+              width={640}
+              height={480}
+              className="absolute top-0 left-0 w-full h-full pointer-events-none"
+            />
           </div>
 
           <div className="flex gap-4">
-            <Button onClick={captureImage} fullWidth>
+            <Button 
+              onClick={captureImage} 
+              fullWidth
+              disabled={capturedImages.length >= MAX_IMAGES}
+            >
               <IoCamera className="w-5 h-5 mr-2" />
-              Capture Image ({capturedImages.length})
+              Capture Image ({capturedImages.length}/{MAX_IMAGES})
             </Button>
             <Button
               onClick={() => fileInputRef.current?.click()}
               variant="outline"
               fullWidth
+              disabled={capturedImages.length >= MAX_IMAGES}
             >
               <IoCloudUpload className="w-5 h-5 mr-2" />
               Upload Images
@@ -127,12 +234,24 @@ const FaceRegistration = () => {
         <Card>
           <h2 className="text-xl font-semibold mb-4">Registration Info</h2>
           <div className="space-y-4">
+            {isPrefilledStudent && studentEmail && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <span className="font-semibold">Student:</span> {studentName}
+                </p>
+                <p className="text-sm text-blue-800">
+                  <span className="font-semibold">Email:</span> {studentEmail}
+                </p>
+              </div>
+            )}
             <Input
-              label="Student ID"
-              type="number"
-              placeholder="Enter student ID"
+              label="Roll Number"
+              type="text"
+              placeholder="Enter roll number"
               value={studentId}
               onChange={(e) => setStudentId(e.target.value)}
+              disabled={isPrefilledStudent}
+              className={isPrefilledStudent ? 'bg-gray-100 cursor-not-allowed' : ''}
             />
 
             <div>
@@ -140,10 +259,14 @@ const FaceRegistration = () => {
                 Images Captured
               </label>
               <div className="text-3xl font-bold text-primary-600">
-                {capturedImages.length}
+                {capturedImages.length}/{MAX_IMAGES}
               </div>
               <p className="text-sm text-gray-600 mt-1">
-                Minimum 3 images recommended
+                {capturedImages.length < 3 
+                  ? `Minimum 3 images required (${3 - capturedImages.length} more needed)`
+                  : capturedImages.length >= MAX_IMAGES
+                  ? 'Maximum images reached'
+                  : 'Ready to register'}
               </p>
             </div>
 
@@ -152,7 +275,7 @@ const FaceRegistration = () => {
               isLoading={isProcessing}
               fullWidth
               size="lg"
-              disabled={capturedImages.length === 0 || !studentId}
+              disabled={capturedImages.length < 3 || capturedImages.length > MAX_IMAGES || !studentId}
             >
               <IoCheckmark className="w-5 h-5 mr-2" />
               Register Face
@@ -199,23 +322,27 @@ const FaceRegistration = () => {
         <ul className="space-y-2 text-gray-600">
           <li className="flex items-start gap-2">
             <span className="text-primary-600 font-bold">1.</span>
-            <span>Enter the student ID in the form</span>
+            <span>Enter the roll number in the form</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-primary-600 font-bold">2.</span>
-            <span>Capture at least 3-5 images from different angles</span>
+            <span>Position your face within the green guide overlay on the camera</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-primary-600 font-bold">3.</span>
-            <span>Ensure good lighting and clear face visibility</span>
+            <span>Capture 3-5 images from different angles (straight, slight left, slight right)</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-primary-600 font-bold">4.</span>
-            <span>Click "Register Face" to complete the registration</span>
+            <span>Ensure good lighting and clear face visibility without glasses or masks</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-primary-600 font-bold">5.</span>
-            <span>The student can now use face recognition for attendance</span>
+            <span>Click "Register Face" when you have captured 3-5 quality images</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-primary-600 font-bold">6.</span>
+            <span>Maximum {MAX_IMAGES} images allowed per registration</span>
           </li>
         </ul>
       </Card>
