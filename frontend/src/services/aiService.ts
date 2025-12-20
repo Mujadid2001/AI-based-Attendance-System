@@ -99,6 +99,39 @@ export const aiService = {
     return response.data
   },
 
+  // Bulk recognize and mark attendance
+  bulkRecognizeAttendance: async (sessionId: number, images: File[]): Promise<{
+    message: string
+    summary: {
+      total_enrolled: number
+      marked_present: number
+      marked_absent: number
+      already_marked: number
+      recognized_faces: number
+    }
+    recognized_students: Array<{
+      student_id: number
+      student_name: string
+      confidence: number
+      recognized: boolean
+    }>
+  }> => {
+    const formData = new FormData()
+    formData.append('session_id', sessionId.toString())
+    images.forEach((image) => {
+      formData.append('images', image)
+    })
+
+    const response = await api.post(
+      '/ai/face-recognition/bulk-recognize-attendance/',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    )
+    return response.data
+  },
+
   // Test face detection
   testFaceDetection: async (imageFile: File): Promise<{
     faces_detected: number

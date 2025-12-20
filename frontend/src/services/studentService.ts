@@ -7,6 +7,7 @@ export const studentService = {
     page?: number
     search?: string
     ordering?: string
+    course?: number
   }): Promise<PaginatedResponse<StudentProfile>> => {
     const response = await api.get<PaginatedResponse<StudentProfile>>(
       '/students/profiles/',

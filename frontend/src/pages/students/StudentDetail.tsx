@@ -121,16 +121,18 @@ const StudentDetail = () => {
             <p className="text-gray-600">{student.roll_number}</p>
           </div>
           <div className="flex space-x-2">
-            <Link to={`/face-registration`} state={{ 
-              prefilledRollNumber: student.roll_number,
-              studentEmail: student.user.email,
-              studentName: `${student.user.first_name} ${student.user.last_name}`
-            }}>
-              <Button variant="secondary">
-                <IoCamera className="w-5 h-5 mr-2" />
-                Register Face
-              </Button>
-            </Link>
+            {!student.is_face_registered && (
+              <Link to={`/face-registration`} state={{ 
+                prefilledRollNumber: student.roll_number,
+                studentEmail: student.user.email,
+                studentName: `${student.user.first_name} ${student.user.last_name}`
+              }}>
+                <Button variant="secondary">
+                  <IoCamera className="w-5 h-5 mr-2" />
+                  Register Face
+                </Button>
+              </Link>
+            )}
             <Link to={`/students/${id}/edit`}>
               <Button variant="outline">Edit</Button>
             </Link>
@@ -147,6 +149,33 @@ const StudentDetail = () => {
           <DetailItem icon={IoIdCard} label="Roll Number" value={student.roll_number} />
           <DetailItem icon={IoSchool} label="Department" value={student.department || 'N/A'} />
           <DetailItem icon={IoCalendar} label="Semester" value={student.semester || 'N/A'} />
+        </div>
+        
+        {/* Email Verification Status */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <div className="flex items-center space-x-4">
+            {student.user.is_verified ? (
+              <>
+                <IoCheckmarkCircle className="w-8 h-8 text-green-600" />
+                <div>
+                  <Badge variant="success" size="sm">Email Verified</Badge>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Student email has been verified.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <IoCloseCircle className="w-8 h-8 text-red-600" />
+                <div>
+                  <Badge variant="danger" size="sm">Email Unverified</Badge>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Student needs to verify their email address before they can login.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </Card>
 

@@ -1,13 +1,47 @@
-import { Link } from 'react-router-dom';
-import { Card, Avatar, Button } from '@components/ui'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Card, Avatar, Button, LoadingSpinner } from '@components/ui'
 import { useAuthStore } from '@store/authStore'
-import { IoPerson, IoMail, IoCall, IoPencil } from 'react-icons/io5'
+import { IoPerson, IoMail, IoCall, IoPencil, IoSchool, IoCard, IoBriefcase } from 'react-icons/io5'
+import { studentService } from '@services/index'
+import toast from 'react-hot-toast'
 
 const Profile = () => {
   const { user } = useAuthStore()
+  const [loading, setLoading] = useState(false)
+  const [studentProfile, setStudentProfile] = useState<any>(null)
+
+  const isStudent = user?.role === 'student'
+
+  useEffect(() => {
+    if (isStudent && user?.student_id) {
+      fetchStudentProfile()
+    }
+  }, [user])
+
+  const fetchStudentProfile = async () => {
+    setLoading(true)
+    try {
+      const profile = await studentService.getStudent(user.student_id)
+      setStudentProfile(profile)
+    } catch (error) {
+      console.error('Failed to fetch student profile:', error)
+      toast.error('Failed to load student profile')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   if (!user) {
     return null
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
   }
 
   return (
@@ -59,6 +93,31 @@ const Profile = () => {
               <p className="font-semibold">{user.phone || 'N/A'}</p>
             </div>
           </div>
+          {isStudent && studentProfile && (
+            <>
+              <div className="flex items-center space-x-4">
+                <IoCard className="w-8 h-8 text-gray-400" />
+                <div>
+                  <p className="text-sm text-gray-500">Roll Number</p>
+                  <p className="font-semibold">{studentProfile.roll_number}</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-4">
+                <IoSchool className="w-8 h-8 text-gray-400" />
+                <div>
+                  <p className="text-sm text-gray-500">Department</p>
+                  <p className="font-semibold">{studentProfile.department || 'N/A'}</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-4">
+                <IoBriefcase className="w-8 h-8 text-gray-400" />
+                <div>
+                  <p className="text-sm text-gray-500">Semester</p>
+                  <p className="font-semibold">{studentProfile.semester || 'N/A'}</p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </Card>
     </div>

@@ -33,7 +33,7 @@ const AddStudent = () => {
     setLoading(true);
     try {
       await studentService.createStudent(formData);
-      toast.success('Student added successfully');
+      toast.success('Student added successfully! A verification email has been sent to the student.');
       navigate('/students');
     } catch (error: any) {
       console.error('Student registration error:', error);
@@ -68,6 +68,22 @@ const AddStudent = () => {
           <p className="text-gray-600 mt-1">Enter the details for the new student.</p>
         </div>
       </div>
+      
+      {/* Information Alert */}
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 text-blue-600 text-xl">ℹ️</div>
+          <div>
+            <h3 className="font-semibold text-blue-900 mb-1">Email Verification Required</h3>
+            <p className="text-sm text-blue-700">
+              After creating the account, a verification email will be sent to the student. 
+              The student must verify their email before they can log in. They should also change 
+              their password after the first login for security.
+            </p>
+          </div>
+        </div>
+      </div>
+      
       <Card>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

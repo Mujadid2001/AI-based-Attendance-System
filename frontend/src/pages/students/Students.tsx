@@ -3,22 +3,42 @@ import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { IoAdd, IoSearch, IoPerson } from 'react-icons/io5'
 import { Card, Button, Input, LoadingSpinner, Badge } from '@components/ui'
-import { studentService } from '@services/index'
-import type { StudentProfile } from '@/types'
+import { studentService, courseService } from '@services/index'
+import type { StudentProfile, Course } from '@/types'
 import toast from 'react-hot-toast'
 
 const Students = () => {
   const [students, setStudents] = useState<StudentProfile[]>([])
+  const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCourse, setSelectedCourse] = useState<string>('')
 
   useEffect(() => {
+    fetchCourses()
     fetchStudents()
   }, [])
 
+  useEffect(() => {
+    fetchStudents()
+  }, [selectedCourse])
+
+  const fetchCourses = async () => {
+    try {
+      const response = await courseService.getCourses()
+      setCourses(response.results || response || [])
+    } catch (error) {
+      console.error('Failed to load courses:', error)
+    }
+  }
+
   const fetchStudents = async () => {
     try {
-      const response = await studentService.getStudents()
+      const params: any = {}
+      if (selectedCourse) {
+        params.course = parseInt(selectedCourse)
+      }
+      const response = await studentService.getStudents(params)
       console.log('Students API response:', response)
       setStudents(response.results || response || [])
     } catch (error) {
@@ -52,29 +72,36 @@ const Students = () => {
           <h1 className="text-3xl font-bold text-gray-900">Students</h1>
           <p className="text-gray-600 mt-1">Manage student profiles and information</p>
         </div>
-        <div className="flex gap-3">
-          <Link to="/face-registration">
-            <Button variant="secondary">
-              Register Faces
-            </Button>
-          </Link>
-          <Link to="/students/add">
-            <Button>
-              <IoAdd className="w-5 h-5 mr-2" />
-              Add Student
-            </Button>
-          </Link>
-        </div>
+        <Link to="/students/add">
+          <Button>
+            <IoAdd className="w-5 h-5 mr-2" />
+            Add Student
+          </Button>
+        </Link>
       </div>
 
       {/* Search */}
       <Card>
-        <Input
-          placeholder="Search students by name or ID..."
-          leftIcon={<IoSearch className="w-5 h-5 text-gray-400" />}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Input
+            placeholder="Search students by name or ID..."
+            leftIcon={<IoSearch className="w-5 h-5 text-gray-400" />}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <select
+            value={selectedCourse}
+            onChange={(e) => setSelectedCourse(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          >
+            <option value="">All Students</option>
+            {courses.map((course) => (
+              <option key={course.id} value={course.id}>
+                {course.code} - {course.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </Card>
 
       {/* Students Grid */}
@@ -107,13 +134,18 @@ const Students = () => {
                     <p className="text-sm text-gray-600">{student.roll_number}</p>
                   </div>
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="space-y-2">
                   <span className="text-sm text-gray-600">{student.user.email}</span>
-                  {student.is_face_registered ? (
-                    <Badge variant="success" size="sm">Face Registered</Badge>
-                  ) : (
-                    <Badge variant="warning" size="sm">No Face Data</Badge>
-                  )}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {student.is_face_registered ? (
+                      <Badge variant="success" size="sm">Face Registered</Badge>
+                    ) : (
+                      <Badge variant="warning" size="sm">No Face Data</Badge>
+                    )}
+                    {!student.user.is_verified && (
+                      <Badge variant="danger" size="sm">Email Unverified</Badge>
+                    )}
+                  </div>
                 </div>
               </Card>
             </Link>

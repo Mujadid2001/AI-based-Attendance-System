@@ -73,7 +73,7 @@ class Attendance(models.Model):
         """Attendance status choices."""
         PRESENT = 'present', _('Present')
         ABSENT = 'absent', _('Absent')
-        LATE = 'late', _('Late')
+        LEAVE = 'leave', _('On Leave')
         EXCUSED = 'excused', _('Excused Absence')
     
     session = models.ForeignKey(

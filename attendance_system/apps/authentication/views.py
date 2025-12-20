@@ -48,6 +48,17 @@ class AuthenticationViewSet(viewsets.ViewSet):
         if serializer.is_valid():
             user = serializer.save()
             
+            # Create StudentProfile automatically for student users
+            if user.role == User.Role.STUDENT:
+                # Generate temporary roll number that user can update later
+                temp_roll = f"TEMP-{user.id}"
+                StudentProfile.objects.create(
+                    user=user,
+                    roll_number=temp_roll,
+                    is_active=True
+                )
+                logger.info(f"StudentProfile created for self-registered student: {user.email} with roll number: {temp_roll}")
+            
             # Create verification token and send email
             token = EmailVerificationToken.objects.create(user=user)
             email_sent = send_verification_email(user, token)
@@ -255,7 +266,7 @@ class AuthenticationViewSet(viewsets.ViewSet):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['put'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['put'], permission_classes=[IsAuthenticated], url_path='profile-update')
     def profile_update(self, request):
         """Update user profile."""
         serializer = UserUpdateSerializer(
@@ -321,7 +332,7 @@ class AuthenticationViewSet(viewsets.ViewSet):
             }
         )
     
-    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='verify-email')
     def verify_email(self, request):
         """Verify user email with token."""
         from django.utils.decorators import method_decorator

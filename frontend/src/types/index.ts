@@ -6,9 +6,11 @@ export interface User {
   first_name: string
   last_name: string
   role: 'admin' | 'teacher' | 'student'
-  is_email_verified: boolean
+  is_verified: boolean
+  is_email_verified?: boolean  // Alias for is_verified
   profile_picture?: string
   phone?: string
+  student_id?: number  // Student profile ID if user is a student
   created_at: string
   updated_at: string
 }
@@ -40,6 +42,7 @@ export interface AuthResponse {
 
 // Student Types
 export interface StudentProfile {
+  id: number
   user: User
   roll_number: string
   department?: string
@@ -100,21 +103,30 @@ export interface AttendanceSession {
 
 export interface AttendanceRecord {
   id: number
-  session: AttendanceSession
+  session: number | AttendanceSession
   student: StudentProfile
-  status: 'present' | 'absent' | 'late' | 'excused'
-  marked_at: string
-  marked_by: User
-  verification_method: 'manual' | 'face_recognition' | 'qr_code'
+  student_roll?: string
+  student_name?: string
+  status: 'present' | 'absent' | 'leave' | 'excused'
+  status_display?: string
+  check_in_time?: string
+  check_in_method?: 'manual' | 'face_recognition' | 'qr_code' | 'ai_recognition'
+  check_in_method_display?: string
   confidence_score?: number
-  notes?: string
+  liveness_verified?: boolean
+  remarks?: string
+  recorded_by?: number | User
+  recorded_by_name?: string
+  session_date?: string
+  session_time?: string
+  created_at: string
 }
 
 export interface AttendanceStats {
   total_sessions: number
   attended: number
   absent: number
-  late: number
+  leave: number
   attendance_percentage: number
 }
 

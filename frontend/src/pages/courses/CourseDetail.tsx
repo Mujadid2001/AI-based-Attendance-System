@@ -74,6 +74,14 @@ const CourseDetail = () => {
     navigate('/attendance', { state: { preselectedCourseId: course?.id } });
   }
 
+  const isUpcoming = (course: Course | null): boolean => {
+    if (!course || !course.start_date) return false
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const startDate = new Date(course.start_date)
+    return startDate > today
+  }
+
   const fetchCourseDetails = async () => {
     try {
       // Fetch course details
@@ -84,18 +92,10 @@ const CourseDetail = () => {
       try {
         const enrollmentsData = await courseService.getCourseEnrollments(Number(id))
         setEnrollments(enrollmentsData)
-        // Get student details for each enrollment
+        // Extract student profiles from enrollments (API returns nested student objects)
         if (enrollmentsData && enrollmentsData.length > 0) {
-          const studentIds = enrollmentsData.map((e) => e.student)
-          if (studentIds.length > 0) {
-            const studentsData = await studentService.getStudents()
-            const enrolledStudents = studentsData.results.filter((s: StudentProfile) =>
-              studentIds.includes(s.user.id)
-            )
-            setStudents(enrolledStudents)
-          } else {
-            setStudents([])
-          }
+          const enrolledStudents = enrollmentsData.map((e: any) => e.student).filter(Boolean)
+          setStudents(enrolledStudents)
         } else {
           setStudents([])
         }
@@ -240,9 +240,13 @@ const CourseDetail = () => {
         {(user?.role === 'admin' || user?.role === 'teacher') && (
           <div className="flex gap-3">
             {course.is_active && (
-              <Button onClick={handleStartAttendance}>
+              <Button 
+                onClick={handleStartAttendance}
+                disabled={isUpcoming(course)}
+                title={isUpcoming(course) ? 'Course has not started yet' : 'Start attendance session'}
+              >
                 <IoCalendar className="w-5 h-5 mr-2" />
-                Start Attendance
+                {isUpcoming(course) ? 'Course Not Started' : 'Start Attendance'}
               </Button>
             )}
             <Button variant="secondary" onClick={handleEdit}>Edit Course</Button>
@@ -271,17 +275,25 @@ const CourseDetail = () => {
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">{course.name}</h1>
                 <p className="text-xl text-gray-600 mb-4">{course.code}</p>
               </div>
-              {course.is_active ? (
-                <Badge variant="success">
-                  <IoCheckmarkCircle className="w-4 h-4 mr-1" />
-                  Active
-                </Badge>
-              ) : (
-                <Badge variant="default">
-                  <IoCloseCircle className="w-4 h-4 mr-1" />
-                  Inactive
-                </Badge>
-              )}
+              <div className="flex gap-2">
+                {isUpcoming(course) && (
+                  <Badge variant="warning">
+                    <IoCalendar className="w-4 h-4 mr-1" />
+                    Upcoming
+                  </Badge>
+                )}
+                {course.is_active ? (
+                  <Badge variant="success">
+                    <IoCheckmarkCircle className="w-4 h-4 mr-1" />
+                    Active
+                  </Badge>
+                ) : (
+                  <Badge variant="default">
+                    <IoCloseCircle className="w-4 h-4 mr-1" />
+                    Inactive
+                  </Badge>
+                )}
+              </div>
             </div>
             <p className="text-gray-700 mb-4">
               {course.description || 'No description available'}
@@ -291,6 +303,12 @@ const CourseDetail = () => {
                 <IoCalendar className="w-4 h-4 mr-2" />
                 {course.semester} {course.year}
               </div>
+              {course.start_date && (
+                <div className="flex items-center">
+                  <IoTime className="w-4 h-4 mr-2" />
+                  Starts: {new Date(course.start_date).toLocaleDateString()}
+                </div>
+              )}
               <div className="flex items-center">
                 <IoPeople className="w-4 h-4 mr-2" />
                 {students.length} Students Enrolled
@@ -443,29 +461,46 @@ const CourseDetail = () => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {availableStudents.map((student) => (
-                    <div
-                      key={student.user.id}
-                      className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {student.user.first_name} {student.user.last_name}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          Roll: {student.roll_number} • {student.department}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handleEnrollStudent(student.user.id)}
-                        isLoading={enrolling}
+                  {availableStudents.map((student) => {
+                    const isUnverified = !student.user.is_verified
+                    return (
+                      <div
+                        key={student.user.id}
+                        className={`flex items-center justify-between p-4 border rounded-lg ${
+                          isUnverified ? 'border-red-200 bg-red-50' : 'border-gray-200 hover:bg-gray-50'
+                        }`}
                       >
-                        <IoPersonAdd className="w-4 h-4 mr-1" />
-                        Enroll
-                      </Button>
-                    </div>
-                  ))}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-gray-900">
+                              {student.user.first_name} {student.user.last_name}
+                            </p>
+                            {isUnverified && (
+                              <Badge variant="danger" size="sm">Email Unverified</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            Roll: {student.roll_number} • {student.department}
+                          </p>
+                          {isUnverified && (
+                            <p className="text-xs text-red-600 mt-1">
+                              Cannot enroll - student must verify email first
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handleEnrollStudent(student.user.id)}
+                          isLoading={enrolling}
+                          disabled={isUnverified}
+                          variant={isUnverified ? 'secondary' : 'primary'}
+                        >
+                          <IoPersonAdd className="w-4 h-4 mr-1" />
+                          {isUnverified ? 'Unverified' : 'Enroll'}
+                        </Button>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

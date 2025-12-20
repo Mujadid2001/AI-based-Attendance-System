@@ -6,6 +6,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.attendance.models import (
     AttendanceSession, Attendance, AttendanceReport
 )
+from apps.authentication.serializers import UserSerializer
 
 
 class AttendanceSessionSerializer(serializers.ModelSerializer):
@@ -43,8 +44,22 @@ class AttendanceSessionSerializer(serializers.ModelSerializer):
         return obj.attendances.count()
 
 
+class StudentProfileMinimalSerializer(serializers.Serializer):
+    """Minimal serializer for student profile in attendance records."""
+    id = serializers.SerializerMethodField()
+    roll_number = serializers.CharField()
+    user = UserSerializer(read_only=True)
+    
+    def get_id(self, obj):
+        """Get the primary key (user_id) of the StudentProfile."""
+        return obj.pk
+
+
 class AttendanceSerializer(serializers.ModelSerializer):
     """Serializer for Attendance records."""
+    
+    # Nested student object with user details
+    student = StudentProfileMinimalSerializer(read_only=True)
     
     student_roll = serializers.CharField(
         source='student.roll_number',
@@ -60,6 +75,14 @@ class AttendanceSerializer(serializers.ModelSerializer):
     )
     session_time = serializers.CharField(
         source='session.start_time',
+        read_only=True
+    )
+    course_code = serializers.CharField(
+        source='session.course.code',
+        read_only=True
+    )
+    course_name = serializers.CharField(
+        source='session.course.name',
         read_only=True
     )
     status_display = serializers.CharField(
@@ -83,7 +106,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'check_in_time', 'check_in_method',
             'check_in_method_display', 'confidence_score',
             'liveness_verified', 'remarks', 'recorded_by', 'recorded_by_name',
-            'session_date', 'session_time', 'created_at'
+            'session_date', 'session_time', 'course_code', 'course_name', 'created_at'
         ]
         read_only_fields = ['created_at']
 

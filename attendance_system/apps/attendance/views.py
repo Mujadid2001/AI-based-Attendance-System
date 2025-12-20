@@ -131,17 +131,77 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Filter attendance based on user role."""
+        queryset = Attendance.objects.all()
+        
         if self.request.user.is_admin():
-            return Attendance.objects.all()
+            return queryset
         elif self.request.user.is_teacher():
-            return Attendance.objects.filter(
-                session__course__instructor=self.request.user
-            )
+            # Teachers can see attendance for courses they teach OR sessions they created
+            return queryset.filter(
+                Q(session__course__instructor=self.request.user) |
+                Q(session__created_by=self.request.user)
+            ).distinct()
         elif self.request.user.is_student():
-            return Attendance.objects.filter(
+            return queryset.filter(
                 student__user=self.request.user
             )
         return Attendance.objects.none()
+    
+    def update(self, request, *args, **kwargs):
+        """Update attendance record."""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        
+        # Return with full serializer
+        output_serializer = AttendanceSerializer(instance)
+        return Response(output_serializer.data)
+    
+    def partial_update(self, request, *args, **kwargs):
+        """Partial update attendance record."""
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+    
+    def create(self, request, *args, **kwargs):
+        """Create attendance record with proper defaults for manual marking."""
+        data = request.data.copy()
+        
+        # Set defaults for manual attendance marking
+        if 'check_in_method' not in data:
+            data['check_in_method'] = 'manual'
+        if 'check_in_time' not in data:
+            data['check_in_time'] = timezone.now().time()
+        
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Check if attendance already exists
+        # StudentProfile uses user as primary key, so we use pk instead of id
+        session_id = serializer.validated_data.get('session').id
+        student = serializer.validated_data.get('student')
+        student_id = student.pk  # pk works for any model, even with custom primary keys
+        
+        existing = Attendance.objects.filter(
+            session_id=session_id,
+            student_id=student_id
+        ).first()
+        
+        if existing:
+            return Response(
+                {'detail': 'Attendance already exists for this student in this session.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Set recorded_by
+        attendance = serializer.save(recorded_by=request.user)
+        
+        logger.info(f"Attendance created: {attendance}")
+        
+        # Return with full serializer
+        output_serializer = AttendanceSerializer(attendance)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
     
     @action(detail=False, methods=['post'])
     def mark_attendance(self, request):
@@ -209,7 +269,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         summary = {
             'total': attendances.count(),
             'present': attendances.filter(status=Attendance.Status.PRESENT).count(),
-            'late': attendances.filter(status=Attendance.Status.LATE).count(),
+            'leave': attendances.filter(status=Attendance.Status.LEAVE).count(),
             'absent': attendances.filter(status=Attendance.Status.ABSENT).count(),
         }
         
@@ -241,9 +301,9 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         # Calculate overall statistics
         total = queryset.count()
         present = queryset.filter(status=Attendance.Status.PRESENT).count()
-        late = queryset.filter(status=Attendance.Status.LATE).count()
+        leave = queryset.filter(status=Attendance.Status.LEAVE).count()
         absent = queryset.filter(status=Attendance.Status.ABSENT).count()
-        percentage = ((present + late) / total * 100) if total > 0 else 0
+        percentage = ((present + leave) / total * 100) if total > 0 else 0
         
         # Get enrolled courses with attendance stats
         enrollments = student.enrollments.filter(is_active=True).select_related('course')
@@ -253,17 +313,17 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             course_attendances = queryset.filter(session__course=enrollment.course)
             course_total = course_attendances.count()
             course_present = course_attendances.filter(status=Attendance.Status.PRESENT).count()
-            course_late = course_attendances.filter(status=Attendance.Status.LATE).count()
-            course_percentage = ((course_present + course_late) / course_total * 100) if course_total > 0 else 0
+            course_leave = course_attendances.filter(status=Attendance.Status.LEAVE).count()
+            course_percentage = ((course_present + course_leave) / course_total * 100) if course_total > 0 else 0
             
             courses_stats.append({
                 'course_id': enrollment.course.id,
-                'course_code': enrollment.course.course_code,
-                'course_name': enrollment.course.course_name,
+                'course_code': enrollment.course.code,
+                'course_name': enrollment.course.name,
                 'total_sessions': course_total,
                 'present': course_present,
-                'late': course_late,
-                'absent': course_total - course_present - course_late,
+                'leave': course_leave,
+                'absent': course_total - course_present - course_leave,
                 'percentage': round(course_percentage, 2)
             })
         
@@ -280,7 +340,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             'overall_stats': {
                 'total': total,
                 'present': present,
-                'late': late,
+                'leave': leave,
                 'absent': absent,
                 'percentage': round(percentage, 2)
             },
@@ -531,13 +591,22 @@ def today_attendance(request):
     records = Attendance.objects.filter(session__date=today)
     total_sessions = AttendanceSession.objects.filter(date=today).count()
     
-    marked = records.filter(status__in=['present', 'late', 'absent']).count()
+    marked = records.filter(status__in=['present', 'leave', 'absent']).count()
     present = records.filter(status='present').count()
+    leave = records.filter(status='leave').count()
+    absent = records.filter(status='absent').count()
+    
+    # Calculate total expected attendance (total sessions * total enrolled students)
+    # For simplicity, we'll use marked as total
+    total_expected = marked
     
     return Response({
         'date': today,
-        'total': marked,
-        'marked': present,
+        'total': total_expected,
+        'marked': present + leave,
+        'present': present,
+        'leave': leave,
+        'absent': absent,
         'sessions': total_sessions,
         'percentage': round((present / (marked or 1)) * 100, 2)
     })
@@ -553,18 +622,9 @@ def get_session_records(request, session_id):
             'student', 'student__user'
         )
         
-        data = []
-        for record in records:
-            data.append({
-                'id': record.id,
-                'student_name': record.student.user.get_full_name(),
-                'student_email': record.student.user.email,
-                'status': record.status,
-                'time': record.created_at.strftime('%H:%M:%S') if record.created_at else '',
-                'remarks': record.remarks
-            })
-        
-        return Response(data)
+        # Use the serializer to return properly structured data
+        serializer = AttendanceSerializer(records, many=True)
+        return Response(serializer.data)
     except AttendanceSession.DoesNotExist:
         return Response(
             {'detail': 'Session not found'},

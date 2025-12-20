@@ -112,15 +112,23 @@ class UserSerializer(serializers.ModelSerializer):
         source='get_full_name',
         read_only=True
     )
+    student_id = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'full_name',
             'phone', 'role', 'role_display', 'profile_picture',
-            'is_verified', 'is_active', 'created_at', 'updated_at'
+            'is_verified', 'is_active', 'student_id', 
+            'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_student_id(self, obj):
+        """Get student profile ID if user is a student."""
+        if obj.role == 'student' and hasattr(obj, 'student_profile'):
+            return obj.student_profile.user_id  # This is the primary key
+        return None
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):

@@ -54,7 +54,8 @@ class CourseViewSet(viewsets.ModelViewSet):
         """Get enrolled students for a course."""
         course = self.get_object()
         enrollments = course.enrollments.filter(is_active=True)
-        serializer = EnrollmentSerializer(enrollments, many=True)
+        from apps.student.serializers import EnrollmentWithStudentSerializer
+        serializer = EnrollmentWithStudentSerializer(enrollments, many=True)
         return Response(serializer.data)
 
 
@@ -72,15 +73,27 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
         return StudentProfileSerializer
 
     def get_queryset(self):
-        """Filter students based on user role."""
+        """Filter students based on user role and optional course filter."""
+        # Base queryset based on role
         if self.request.user.is_admin():
-            return StudentProfile.objects.all()
+            queryset = StudentProfile.objects.all()
         elif self.request.user.is_teacher():
             # Teachers can see all students
-            return StudentProfile.objects.all()
+            queryset = StudentProfile.objects.all()
         else:  # Student
             # Students can only see themselves
-            return StudentProfile.objects.filter(user=self.request.user)
+            queryset = StudentProfile.objects.filter(user=self.request.user)
+        
+        # Apply course filter if provided (for admin/teacher)
+        course_id = self.request.query_params.get('course')
+        if course_id and (self.request.user.is_admin() or self.request.user.is_teacher()):
+            # Filter students enrolled in the specified course
+            queryset = queryset.filter(
+                enrollments__course_id=course_id,
+                enrollments__is_active=True
+            ).distinct()
+        
+        return queryset
 
     def destroy(self, request, *args, **kwargs):
         """Delete student (admin only)."""
@@ -125,11 +138,11 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], permission_classes=[IsAdminOrTeacher])
     def register_student(self, request):
         """Register a new student, creating user and profile."""
-        serializer = StudentUserRegistrationSerializer(data=request.data)
+        serializer = StudentUserRegistrationSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             user = serializer.save()
             student_profile = StudentProfile.objects.get(user=user)
-            logger.info(f"Student registered: {student_profile.roll_number}")
+            logger.info(f"Student registered: {student_profile.roll_number} by {request.user.email}")
             return Response(
                 StudentProfileSerializer(student_profile).data,
                 status=status.HTTP_201_CREATED
@@ -211,6 +224,13 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
         ).exists():
             return Response(
                 {'error': _('Student already enrolled in this course.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if student email is verified
+        if not student.user.is_verified:
+            return Response(
+                {'error': _('Cannot enroll student with unverified email. Student must verify their email first.')},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

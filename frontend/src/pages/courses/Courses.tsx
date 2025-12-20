@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { IoAdd, IoSearch, IoBook, IoClose } from 'react-icons/io5'
+import { IoAdd, IoSearch, IoBook, IoClose, IoTrash } from 'react-icons/io5'
 import { Card, Button, Input, LoadingSpinner, Badge } from '@components/ui'
 import { courseService } from '@services/index'
 import type { Course } from '@/types'
@@ -64,6 +64,24 @@ const Courses = () => {
     }
   }
 
+  const handleDelete = async (courseId: number, e: React.MouseEvent) => {
+    e.preventDefault() // Prevent navigation to course detail
+    e.stopPropagation() // Stop event bubbling
+    
+    if (!confirm('Are you sure you want to delete this course? This will delete all enrollments and attendance records associated with this course. This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      await courseService.deleteCourse(courseId)
+      setCourses(courses.filter(course => course.id !== courseId))
+      toast.success('Course deleted successfully!')
+    } catch (error: any) {
+      console.error('Failed to delete course:', error)
+      toast.error(error.response?.data?.message || 'Failed to delete course.')
+    }
+  }
+
   const filteredCourses = courses.filter(
     (course) =>
       course.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -113,13 +131,22 @@ const Courses = () => {
           >
             <Link to={`/courses/${course.id}`}>
               <Card hoverable>
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-                    <IoBook className="w-8 h-8 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{course.name}</h3>
-                    <p className="text-sm text-gray-600">{course.code}</p>
+                <div className="relative">
+                  <button
+                    onClick={(e) => handleDelete(course.id, e)}
+                    className="absolute top-0 right-0 p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Delete Course"
+                  >
+                    <IoTrash className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
+                      <IoBook className="w-8 h-8 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{course.name}</h3>
+                      <p className="text-sm text-gray-600">{course.code}</p>
+                    </div>
                   </div>
                 </div>
                 <p className="text-sm text-gray-600 mb-4 line-clamp-2">
@@ -129,11 +156,16 @@ const Courses = () => {
                   <span className="text-sm text-gray-600">
                     {course.semester} {course.year}
                   </span>
-                  {course.is_active ? (
-                    <Badge variant="success" size="sm">Active</Badge>
-                  ) : (
-                    <Badge variant="default" size="sm">Inactive</Badge>
-                  )}
+                  <div className="flex gap-1">
+                    {course.start_date && new Date(course.start_date) > new Date() && (
+                      <Badge variant="warning" size="sm">Upcoming</Badge>
+                    )}
+                    {course.is_active ? (
+                      <Badge variant="success" size="sm">Active</Badge>
+                    ) : (
+                      <Badge variant="default" size="sm">Inactive</Badge>
+                    )}
+                  </div>
                 </div>
               </Card>
             </Link>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
-import { IoAdd, IoCalendar, IoTime, IoPeople } from 'react-icons/io5';
+import { IoAdd, IoCalendar, IoTime, IoPeople, IoTrash } from 'react-icons/io5';
 import { Card, Button, LoadingSpinner, Badge, Input } from '@components/ui';
 import { attendanceService, courseService } from '@services/index';
 import type { AttendanceSession, Course } from '@/types';
@@ -38,7 +38,16 @@ const Attendance = () => {
         courseService.getCourses({ is_active: true }),
       ]);
       setSessions(sessionsRes.results);
-      setCourses(coursesRes.results);
+      
+      // Filter out upcoming courses (courses that haven't started yet)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const availableCourses = coursesRes.results.filter((course: Course) => {
+        if (!course.start_date) return true // No start date means available
+        const startDate = new Date(course.start_date)
+        return startDate <= today // Only include courses that have started
+      })
+      setCourses(availableCourses);
     } catch (error) {
       toast.error('Failed to load data.');
     } finally {
@@ -68,6 +77,24 @@ const Attendance = () => {
       toast.error(error.response?.data?.message || 'Failed to create session.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (sessionId: number, e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigation to session detail
+    e.stopPropagation(); // Stop event bubbling
+    
+    if (!confirm('Are you sure you want to delete this session? This will delete all attendance records associated with this session. This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await attendanceService.deleteSession(sessionId);
+      setSessions(sessions.filter(session => session.id !== sessionId));
+      toast.success('Session deleted successfully!');
+    } catch (error: any) {
+      console.error('Failed to delete session:', error);
+      toast.error(error.response?.data?.message || 'Failed to delete session.');
     }
   };
 
@@ -106,11 +133,20 @@ const Attendance = () => {
                   <h3 className="font-semibold text-gray-900">
                     {session.course_name || (typeof session.course === 'object' ? session.course.name : 'Unknown Course')}
                   </h3>
-                  {session.is_active ? (
-                    <Badge variant="success" size="sm">Active</Badge>
-                  ) : (
-                    <Badge variant="default" size="sm">Inactive</Badge>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {session.is_active ? (
+                      <Badge variant="success" size="sm">Active</Badge>
+                    ) : (
+                      <Badge variant="default" size="sm">Inactive</Badge>
+                    )}
+                    <button
+                      onClick={(e) => handleDelete(session.id, e)}
+                      className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete Session"
+                    >
+                      <IoTrash className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div className="text-sm text-gray-600 space-y-2">
                   <div className="flex items-center">

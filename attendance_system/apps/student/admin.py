@@ -42,7 +42,9 @@ class CourseAdmin(admin.ModelAdmin):
     
     def get_instructor_name(self, obj):
         """Get instructor full name."""
-        return obj.instructor.get_full_name() or obj.instructor.email
+        if obj.instructor:
+            return obj.instructor.get_full_name() or obj.instructor.email
+        return 'No instructor assigned'
     get_instructor_name.short_description = 'Instructor'
     get_instructor_name.admin_order_field = 'instructor__first_name'
     

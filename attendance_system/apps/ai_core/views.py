@@ -216,6 +216,116 @@ class FaceRecognitionViewSet(viewsets.ViewSet):
                 {'error': result.get('error', 'Recognition failed')},
                 status=status.HTTP_400_BAD_REQUEST
             )
+    
+    @action(detail=False, methods=['post'], url_path='bulk-recognize-attendance')
+    def bulk_recognize_attendance(self, request):
+        """
+        Process multiple face recognition images and mark attendance in bulk.
+        Marks recognized students as present and unrecognized as absent.
+        """
+        session_id = request.data.get('session_id')
+        images = request.FILES.getlist('images')
+        
+        if not session_id:
+            return Response(
+                {'error': _('session_id is required.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not images:
+            return Response(
+                {'error': _('At least one image is required.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            session = AttendanceSession.objects.get(id=session_id)
+        except AttendanceSession.DoesNotExist:
+            return Response(
+                {'error': _('Attendance session not found.')},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get all enrolled students for this course
+        from apps.student.models import Enrollment
+        enrolled_students = Enrollment.objects.filter(
+            course=session.course,
+            is_active=True
+        ).select_related('student', 'student__user')
+        
+        recognized_students = set()
+        recognition_results = []
+        ai_manager = get_ai_manager()
+        
+        # Process each image
+        for image_file in images:
+            result = ai_manager.recognize_student_face(image_file)
+            
+            if result['success']:
+                student_id = int(result['student_id'])
+                recognized_students.add(student_id)
+                recognition_results.append({
+                    'student_id': student_id,
+                    'student_name': result.get('student'),
+                    'confidence': result['confidence'],
+                    'recognized': True
+                })
+        
+        # Mark attendance for all enrolled students
+        marked_present = 0
+        marked_absent = 0
+        already_marked = 0
+        
+        for enrollment in enrolled_students:
+            student = enrollment.student
+            student_user_id = student.user.id
+            
+            # Check if already marked
+            existing = Attendance.objects.filter(
+                session=session,
+                student=student
+            ).first()
+            
+            if existing:
+                already_marked += 1
+                continue
+            
+            # Determine status based on recognition
+            if student_user_id in recognized_students:
+                attendance_status = Attendance.Status.PRESENT
+                marked_present += 1
+            else:
+                attendance_status = Attendance.Status.ABSENT
+                marked_absent += 1
+            
+            # Create attendance record
+            Attendance.objects.create(
+                session=session,
+                student=student,
+                status=attendance_status,
+                check_in_time=timezone.now().time(),
+                check_in_method='face_recognition' if attendance_status == Attendance.Status.PRESENT else 'auto_absent',
+                confidence_score=None if attendance_status == Attendance.Status.ABSENT else 0.85,
+                liveness_verified=attendance_status == Attendance.Status.PRESENT,
+                recorded_by=request.user
+            )
+        
+        logger.info(f"Bulk attendance completed: {marked_present} present, {marked_absent} absent, {already_marked} already marked")
+        
+        return Response(
+            {
+                'message': _('Bulk attendance completed successfully.'),
+                'summary': {
+                    'total_enrolled': enrolled_students.count(),
+                    'marked_present': marked_present,
+                    'marked_absent': marked_absent,
+                    'already_marked': already_marked,
+                    'recognized_faces': len(recognized_students)
+                },
+                'recognized_students': recognition_results
+            },
+            status=status.HTTP_201_CREATED
+        )
 
 
 class AIConfigurationViewSet(viewsets.ViewSet):

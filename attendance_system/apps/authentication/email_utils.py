@@ -271,6 +271,312 @@ def resend_verification_email(user):
         }
 
 
+def send_student_welcome_email(user, token, created_by=None):
+    """
+    Send welcome email to student created by teacher with verification instructions.
+    
+    Args:
+        user: User instance (student)
+        token: EmailVerificationToken instance
+        created_by: User instance (teacher who created the account), optional
+    
+    Returns:
+        bool: True if email sent successfully, False otherwise
+    """
+    try:
+        subject = 'Welcome to AI Attendance System - Verify Your Email'
+        
+        verification_token = str(token.token)
+        frontend_url = get_frontend_url()
+        verification_link = f"{frontend_url}/verify-email?token={verification_token}"
+        
+        teacher_name = created_by.get_full_name() if created_by else "your teacher"
+        
+        html_message = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                * {{
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }}
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #1f2937;
+                    background-color: #f3f4f6;
+                    padding: 20px;
+                }}
+                .email-container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    background-color: #ffffff;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+                    color: #ffffff;
+                    padding: 40px 30px;
+                    text-align: center;
+                }}
+                .header h1 {{
+                    font-size: 28px;
+                    font-weight: 700;
+                    margin: 10px 0 0 0;
+                }}
+                .content {{
+                    padding: 40px 30px;
+                }}
+                .content p {{
+                    margin: 15px 0;
+                    color: #4b5563;
+                }}
+                .info-box {{
+                    background: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 100%);
+                    border-left: 4px solid #2563eb;
+                    padding: 20px;
+                    margin: 25px 0;
+                    border-radius: 6px;
+                }}
+                .info-box strong {{
+                    color: #1e40af;
+                }}
+                .info-box br {{
+                    display: block;
+                    content: "";
+                    margin: 8px 0;
+                }}
+                .section-title {{
+                    color: #1f2937;
+                    font-size: 20px;
+                    font-weight: 700;
+                    margin: 30px 0 20px 0;
+                }}
+                .steps {{
+                    background-color: #f9fafb;
+                    padding: 25px;
+                    border-radius: 8px;
+                    margin: 25px 0;
+                }}
+                .step {{
+                    display: flex;
+                    align-items: start;
+                    margin: 20px 0;
+                    padding: 15px;
+                    background-color: #ffffff;
+                    border-radius: 6px;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+                }}
+                .step-number {{
+                    flex-shrink: 0;
+                    width: 36px;
+                    height: 36px;
+                    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+                    color: #ffffff;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: 700;
+                    font-size: 16px;
+                    margin-right: 15px;
+                }}
+                .step-content {{
+                    flex: 1;
+                }}
+                .step-content strong {{
+                    color: #1f2937;
+                    display: block;
+                    margin-bottom: 5px;
+                }}
+                .button-container {{
+                    text-align: center;
+                    margin: 30px 0;
+                }}
+                .button {{
+                    display: inline-block;
+                    padding: 16px 40px;
+                    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+                    color: #ffffff !important;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-weight: 700;
+                    font-size: 16px;
+                    box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
+                    transition: all 0.3s ease;
+                }}
+                .link-box {{
+                    background-color: #f9fafb;
+                    border: 2px dashed #d1d5db;
+                    padding: 20px;
+                    margin: 20px 0;
+                    text-align: center;
+                    border-radius: 8px;
+                }}
+                .link-box a {{
+                    color: #2563eb;
+                    word-break: break-all;
+                    font-size: 13px;
+                    text-decoration: none;
+                }}
+                .warning-box {{
+                    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+                    border-left: 4px solid #f59e0b;
+                    padding: 20px;
+                    border-radius: 6px;
+                    margin: 25px 0;
+                }}
+                .warning-box strong {{
+                    color: #92400e;
+                }}
+                .footer {{
+                    padding: 30px;
+                    text-align: center;
+                    background-color: #f9fafb;
+                    color: #6b7280;
+                    font-size: 13px;
+                    border-top: 1px solid #e5e7eb;
+                }}
+                .footer p {{
+                    margin: 8px 0;
+                }}
+                .highlight {{
+                    color: #2563eb;
+                    font-weight: 600;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="email-container">
+                <div class="header">
+                    <div style="font-size: 48px;">🎓</div>
+                    <h1>Welcome to AI Attendance System!</h1>
+                </div>
+                <div class="content">
+                    <p>Dear <strong>{user.get_full_name()}</strong>,</p>
+                    
+                    <p>Your student account has been created by <span class="highlight">{teacher_name}</span> in the AI Attendance System.</p>
+                    
+                    <div class="info-box">
+                        <strong>📧 Email:</strong> {user.email}<br>
+                        <strong>👤 Name:</strong> {user.get_full_name()}<br>
+                        <strong>🎓 Role:</strong> Student
+                    </div>
+                    
+                    <h3 class="section-title">📋 Next Steps:</h3>
+                    <div class="steps">
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-content">
+                                <strong>Verify Your Email</strong>
+                                <span style="color: #6b7280;">Click the button below to verify your email address</span>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-content">
+                                <strong>Login to Your Account</strong>
+                                <span style="color: #6b7280;">Use your email and the password provided by your teacher</span>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-content">
+                                <strong>Change Your Password</strong>
+                                <span style="color: #6b7280;">Set a new secure password after your first login</span>
+                            </div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">4</div>
+                            <div class="step-content">
+                                <strong>Register Your Face</strong>
+                                <span style="color: #6b7280;">Complete face registration for AI-powered attendance</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="button-container">
+                        <a href="{verification_link}" class="button">✓ Verify Email Address</a>
+                    </div>
+                    
+                    <p style="text-align: center; color: #6b7280; font-size: 13px; margin-top: 15px;">Or copy this verification link:</p>
+                    <div class="link-box">
+                        <a href="{verification_link}">{verification_link}</a>
+                    </div>
+                    
+                    <div class="warning-box">
+                        <strong>⏰ Important:</strong> This verification link will expire in 48 hours. Please verify your email as soon as possible.
+                    </div>
+                    
+                    <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">
+                        If you have any questions, please contact <strong style="color: #1f2937;">{teacher_name}</strong> or the system administrator.
+                    </p>
+                </div>
+                <div class="footer">
+                    <p style="font-weight: 600; color: #1f2937;">© 2025 AI Attendance System</p>
+                    <p>All rights reserved.</p>
+                    <p style="margin-top: 10px;">This is an automated message, please do not reply to this email.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        plain_message = f"""
+Hello {user.get_full_name()},
+
+Your student account has been created by {teacher_name} in the AI Attendance System.
+
+Account Details:
+- Email: {user.email}
+- Name: {user.get_full_name()}
+- Role: Student
+
+NEXT STEPS:
+
+1. Verify Your Email
+   Click the link below to verify your email address:
+   {verification_link}
+   
+2. Login to Your Account
+   Use your email and the password provided by your teacher
+   
+3. Change Your Password
+   Set a new secure password after your first login
+   
+4. Register Your Face
+   Complete face registration for AI-powered attendance
+
+IMPORTANT: This verification link will expire in 48 hours.
+
+If you have any questions, please contact {teacher_name} or the system administrator.
+
+© 2025 AI Attendance System. All rights reserved.
+        """
+        
+        send_mail(
+            subject=subject,
+            message=plain_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            html_message=html_message,
+            fail_silently=False,
+        )
+        
+        logger.info(f"Student welcome email sent to {user.email}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to send student welcome email to {user.email}: {e}")
+        return False
+
+
 def send_teacher_approval_email(user, approved_by=None):
     """
     Send approval notification email to teacher.

@@ -44,6 +44,11 @@ export const attendanceService = {
     await api.delete(`/attendance/sessions/${id}/`)
   },
 
+  closeSession: async (id: number): Promise<AttendanceSession> => {
+    const response = await api.post<AttendanceSession>(`/attendance/sessions/${id}/close_session/`)
+    return response.data
+  },
+
   // Get active session
   getActiveSession: async (): Promise<AttendanceSession | null> => {
     const response = await api.get<AttendanceSession>('/attendance/active_session/')
@@ -112,6 +117,9 @@ export const attendanceService = {
     date: string
     total: number
     marked: number
+    present: number
+    leave: number
+    absent: number
     sessions: number
     percentage: number
   }> => {
@@ -140,7 +148,7 @@ export const attendanceService = {
     overall_stats: {
       total: number
       present: number
-      late: number
+      leave: number
       absent: number
       percentage: number
     }
@@ -150,7 +158,7 @@ export const attendanceService = {
       course_name: string
       total_sessions: number
       present: number
-      late: number
+      leave: number
       absent: number
       percentage: number
     }>

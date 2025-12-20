@@ -7,8 +7,12 @@ from apps.student.models import (
     StudentProfile, Course, Enrollment, StudentFaceImage
 )
 from apps.authentication.serializers import UserRegistrationSerializer, UserSerializer
+from apps.authentication.models import EmailVerificationToken
+from apps.authentication.email_utils import send_student_welcome_email
+import logging
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 class CourseSerializer(serializers.ModelSerializer):
@@ -52,19 +56,20 @@ class StudentFaceImageSerializer(serializers.ModelSerializer):
 class StudentProfileSerializer(serializers.ModelSerializer):
     """Serializer for StudentProfile model."""
 
+    id = serializers.IntegerField(source='user.id', read_only=True)
     user = UserSerializer(read_only=True)
     face_images = StudentFaceImageSerializer(many=True, read_only=True)
 
     class Meta:
         model = StudentProfile
         fields = [
-            'user', 'roll_number',
+            'id', 'user', 'roll_number',
             'department', 'semester', 'is_face_registered',
             'face_encoding_updated_at', 'is_active', 'registration_date',
             'face_images', 'created_at'
         ]
         read_only_fields = [
-            'is_face_registered', 'face_encoding_updated_at',
+            'id', 'is_face_registered', 'face_encoding_updated_at',
             'created_at', 'face_images'
         ]
 
@@ -130,14 +135,33 @@ class StudentUserRegistrationSerializer(UserRegistrationSerializer):
         """Create student user and profile."""
         # Always set role to STUDENT - users cannot send this field
         validated_data['role'] = User.Role.STUDENT
+        
+        # Get the request to identify who is creating the student
+        request = self.context.get('request')
+        created_by = request.user if request and request.user.is_authenticated else None
+        
+        # Create user account
         user = super().create(validated_data)
-
+        
+        # Create student profile
         StudentProfile.objects.create(
             user=user,
             roll_number=validated_data['roll_number'],
             department=validated_data.get('department'),
             semester=validated_data.get('semester')
         )
+        
+        # Create verification token and send welcome email
+        try:
+            token = EmailVerificationToken.objects.create(user=user)
+            email_sent = send_student_welcome_email(user, token, created_by=created_by)
+            if email_sent:
+                logger.info(f"Welcome email sent to new student: {user.email} (created by {created_by})")
+            else:
+                logger.warning(f"Failed to send welcome email to: {user.email}")
+        except Exception as e:
+            logger.error(f"Error sending welcome email to {user.email}: {str(e)}")
+        
         return user
 
 
@@ -161,6 +185,28 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         model = Enrollment
         fields = [
             'id', 'student', 'student_roll', 'course', 'course_code',
+            'course_name', 'is_active', 'enrollment_date'
+        ]
+        read_only_fields = ['enrollment_date']
+
+
+class EnrollmentWithStudentSerializer(serializers.ModelSerializer):
+    """Serializer for Enrollment model with nested student profile."""
+
+    student = StudentProfileSerializer(read_only=True)
+    course_code = serializers.CharField(
+        source='course.code',
+        read_only=True
+    )
+    course_name = serializers.CharField(
+        source='course.name',
+        read_only=True
+    )
+
+    class Meta:
+        model = Enrollment
+        fields = [
+            'id', 'student', 'course', 'course_code',
             'course_name', 'is_active', 'enrollment_date'
         ]
         read_only_fields = ['enrollment_date']

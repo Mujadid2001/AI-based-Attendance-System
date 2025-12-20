@@ -10,8 +10,9 @@ import {
   IoTime,
   IoTrendingUp,
   IoSchool,
+  IoRefresh,
 } from 'react-icons/io5'
-import { Card, LoadingSpinner } from '@components/ui'
+import { Card, LoadingSpinner, Button } from '@components/ui'
 import { useAuthStore } from '@store/authStore'
 import { attendanceService, studentService, courseService } from '@services/index'
 import toast from 'react-hot-toast'
@@ -24,7 +25,7 @@ interface DashboardStats {
   todayAttendance: {
     present: number
     absent: number
-    late: number
+    leave: number
   }
 }
 
@@ -37,7 +38,7 @@ interface StudentAttendanceData {
   overall_stats: {
     total: number
     present: number
-    late: number
+    leave: number
     absent: number
     percentage: number
   }
@@ -47,7 +48,7 @@ interface StudentAttendanceData {
     course_name: string
     total_sessions: number
     present: number
-    late: number
+    leave: number
     absent: number
     percentage: number
   }>
@@ -57,12 +58,13 @@ interface StudentAttendanceData {
 const Dashboard = () => {
   const { user } = useAuthStore()
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [stats, setStats] = useState<DashboardStats>({
     totalStudents: 0,
     totalCourses: 0,
     totalSessions: 0,
     attendanceRate: 0,
-    todayAttendance: { present: 0, absent: 0, late: 0 },
+    todayAttendance: { present: 0, absent: 0, leave: 0 },
   })
   const [studentData, setStudentData] = useState<StudentAttendanceData | null>(null)
 
@@ -72,7 +74,10 @@ const Dashboard = () => {
     fetchDashboardData()
   }, [user])
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true)
+    }
     try {
       if (isStudent) {
         // For students, fetch their personal attendance data
@@ -86,7 +91,7 @@ const Dashboard = () => {
           todayAttendance: {
             present: data.overall_stats.present,
             absent: data.overall_stats.absent,
-            late: data.overall_stats.late,
+            leave: data.overall_stats.leave,
           },
         })
       } else {
@@ -95,14 +100,29 @@ const Dashboard = () => {
           studentService.getStudents().catch(() => ({ count: 0, results: [] })),
           courseService.getCourses().catch(() => ({ count: 0, results: [] })),
           attendanceService.getSessions().catch(() => ({ count: 0, results: [] })),
-          attendanceService.getTodayAttendance().catch(() => ({ total: 0, marked: 0, percentage: 0 })),
+          attendanceService.getTodayAttendance().catch(() => ({ 
+            total: 0, 
+            marked: 0, 
+            present: 0, 
+            leave: 0, 
+            absent: 0, 
+            percentage: 0 
+          })),
         ])
 
-        // Handle todayRes as object with stats, not array
-        const todayStats = Array.isArray(todayRes) ? { total: 0, marked: 0, percentage: 0 } : todayRes
-        const present = todayStats.marked || 0
-        const total = todayStats.total || 0
-        const absent = total - present
+        // Handle todayRes properly
+        const todayStats = Array.isArray(todayRes) ? { 
+          total: 0, 
+          marked: 0, 
+          present: 0, 
+          leave: 0, 
+          absent: 0, 
+          percentage: 0 
+        } : todayRes
+        
+        const present = todayStats.present || 0
+        const leave = todayStats.leave || 0
+        const absent = todayStats.absent || 0
         const rate = todayStats.percentage || 0
 
         setStats({
@@ -110,7 +130,7 @@ const Dashboard = () => {
           totalCourses: coursesRes.count || 0,
           totalSessions: sessionsRes.count || 0,
           attendanceRate: Math.round(rate),
-          todayAttendance: { present, absent, late: 0 },
+          todayAttendance: { present, absent, leave },
         })
       }
     } catch (error) {
@@ -118,7 +138,13 @@ const Dashboard = () => {
       toast.error('Failed to load dashboard data')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
+  }
+
+  const handleRefresh = () => {
+    fetchDashboardData(true)
+    toast.success('Dashboard refreshed!')
   }
 
   if (loading) {
@@ -197,14 +223,27 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-8">
-      {/* Welcome Section */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-r from-primary-600 to-secondary-600 rounded-2xl p-8 text-white shadow-xl"
-      >
-        <h1 className="text-4xl font-bold mb-2">
-          Welcome back, {user?.first_name}! 👋
+      {/*div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">
+              Welcome back, {user?.first_name}! 👋
+            </h1>
+            <p className="text-primary-100 text-lg">
+              {isStudent 
+                ? "Track your attendance and stay updated with your classes."
+                : "Here's what's happening with your attendance system today."}
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="bg-white/20 hover:bg-white/30 text-white border-white/30"
+          >
+            <IoRefresh className={`w-5 h-5 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </divelcome back, {user?.first_name}! 👋
         </h1>
         <p className="text-primary-100 text-lg">
           {isStudent 
@@ -257,7 +296,7 @@ const Dashboard = () => {
           {isStudent ? (
             // Student Course-wise Attendance
             <div className="space-y-4">
-              {studentData && studentData.courses.length > 0 ? (
+              {studentData && studentData.courses && studentData.courses.length > 0 ? (
                 studentData.courses.map((course) => (
                   <div
                     key={course.course_id}
@@ -293,8 +332,8 @@ const Dashboard = () => {
                         <p className="text-xl font-bold text-green-600">{course.present}</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-sm text-gray-600">Late</p>
-                        <p className="text-xl font-bold text-yellow-600">{course.late}</p>
+                        <p className="text-sm text-gray-600">Leave</p>
+                        <p className="text-xl font-bold text-yellow-600">{course.leave}</p>
                       </div>
                       <div className="text-center">
                         <p className="text-sm text-gray-600">Absent</p>
@@ -336,9 +375,9 @@ const Dashboard = () => {
               <div className="flex items-center gap-4 p-4 bg-yellow-50 rounded-xl">
                 <IoTime className="w-12 h-12 text-yellow-600" />
                 <div>
-                  <p className="text-yellow-600 font-semibold text-sm">Late</p>
+                  <p className="text-yellow-600 font-semibold text-sm">On Leave</p>
                   <p className="text-3xl font-bold text-yellow-700">
-                    {stats.todayAttendance.late}
+                    {stats.todayAttendance.leave}
                   </p>
                 </div>
               </div>
@@ -389,6 +428,73 @@ const Dashboard = () => {
                 </h3>
                 <p className="text-sm text-gray-600 mt-1">Generate attendance reports</p>
               </Link>
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Recent Attendance for Students */}
+      {isStudent && studentData && studentData.recent_records && studentData.recent_records.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <Card>
+            <h2 className="text-2xl font-bold mb-6">Recent Attendance Records</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Course
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Time
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Method
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {studentData.recent_records.map((record: any, index: number) => (
+                    <tr key={record.id || index} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {new Date(record.session_date || record.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {record.course_code || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {record.session_time || 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            record.status === 'present'
+                              ? 'bg-green-100 text-green-800'
+                              : record.status === 'leave'
+                              ? 'bg-yellow-100 text-yellow-800'
+                              : 'bg-red-100 text-red-800'
+                          }`}
+                        >
+                          {record.status?.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {record.check_in_method_display || record.check_in_method || 'Manual'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </Card>
         </motion.div>
