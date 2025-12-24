@@ -6,28 +6,33 @@ from apps.student.models import StudentProfile, Course
 from apps.attendance.models import AttendanceSession, Attendance
 
 
+def _get_dashboard_statistics():
+    """Calculate and return dashboard statistics."""
+    total_students = StudentProfile.objects.filter(is_active=True).count()
+    total_courses = Course.objects.filter(is_active=True).count()
+    
+    today = date.today()
+    today_sessions = AttendanceSession.objects.filter(date=today).count()
+    today_attendance = Attendance.objects.filter(
+        session__date=today,
+        status='present'
+    ).count()
+    
+    return {
+        'total_students': total_students,
+        'total_courses': total_courses,
+        'today_sessions': today_sessions,
+        'today_attendance': today_attendance,
+    }
+
+
 def admin_dashboard_stats(request):
     """Add dashboard statistics to admin context."""
     if not request.path.startswith('/admin'):
         return {}
     
     try:
-        total_students = StudentProfile.objects.filter(is_active=True).count()
-        total_courses = Course.objects.filter(is_active=True).count()
-        
-        today = date.today()
-        today_sessions = AttendanceSession.objects.filter(date=today).count()
-        today_attendance = Attendance.objects.filter(
-            session__date=today,
-            status='present'
-        ).count()
-        
-        return {
-            'total_students': total_students,
-            'total_courses': total_courses,
-            'today_sessions': today_sessions,
-            'today_attendance': today_attendance,
-        }
+        return _get_dashboard_statistics()
     except Exception:
         return {
             'total_students': 0,
