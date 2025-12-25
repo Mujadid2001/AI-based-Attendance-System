@@ -37,10 +37,10 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Validate image file size (max 5MB)
-        if image_file.size > 5 * 1024 * 1024:
+        # Validate image file size (max 7MB)
+        if image_file.size > 7 * 1024 * 1024:
             return Response(
-                {'error': _('Image file size must be less than 5MB.')},
+                {'error': _('Image file size must be less than 7MB.')},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
