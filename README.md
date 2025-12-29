@@ -19,85 +19,90 @@ Modern attendance management with AI-powered facial recognition. Complete separa
 
 ---
 
-## 🚀 Quick Setup (WSL/Ubuntu)
+## 🚀 Quick Start
 
 ### Prerequisites
+- Python 3.11+
+- Node.js 18+
+- PostgreSQL (production only)
+- Redis (production only)
+
+### Development
 
 ```bash
-# Install Python, Node.js and build tools
-sudo apt update
-sudo apt install -y python3 python3-pip python3-venv build-essential cmake
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-```
-
-### Installation
-
-```bash
-# 1. Navigate to project (from Windows, use WSL path)
-cd "/mnt/d/FYP project/AI-based-Attendance-System"
-
-# 2. Make setup script executable
+# 1. Setup
 chmod +x setup.sh start.sh
-
-# 3. Run setup (installs everything)
 ./setup.sh
 
-# 4. Start both servers
+# 2. Start servers
 ./start.sh
 ```
 
-**Access from Windows browser:**
+**Access:**
 - Frontend: http://localhost:3000
 - Backend: http://localhost:8000/api
 - Admin: http://localhost:8000/admin
 
+**Note:** Development uses SQLite and console email. Configure `.env.development` if needed.
+
+### Production (Docker)
+
+```bash
+# 1. Configure environment
+# Edit .env.production with your values
+
+# 2. Start services
+docker-compose up -d
+
+# 3. Create superuser
+docker-compose exec api python manage.py createsuperuser
+```
+
+### Production (Manual)
+
+```bash
+# 1. Configure environment
+# Edit .env.production
+
+# 2. Deploy
+export DJANGO_SETTINGS_MODULE=config.settings.production
+chmod +x start_production.sh
+./start_production.sh
+```
+
 ---
 
-## 📖 Detailed Setup
+## � Project Structure
 
-### Step 1: System Dependencies
-
-```bash
-sudo apt update
-sudo apt install -y \
-    build-essential cmake \
-    python3 python3-pip python3-venv \
-    libopenblas-dev liblapack-dev \
-    libx11-dev libgtk-3-dev \
-    libgl1-mesa-glx
+```
+├── attendance_system/          # Django Backend
+│   ├── apps/                   # Django apps
+│   │   ├── ai_core/           # Face recognition
+│   │   ├── attendance/        # Attendance management
+│   │   ├── authentication/    # User auth & JWT
+│   │   └── student/           # Student/Course management
+│   ├── config/                # Settings & configuration
+│   │   └── settings/          # Environment-based settings
+│   └── manage.py
+├── frontend/                  # React Frontend
+│   ├── src/
+│   │   ├── components/       # Reusable components
+│   │   ├── pages/            # Page components
+│   │   ├── services/         # API services
+│   │   └── store/            # State management
+│   └── package.json
+├── .env.development          # Development config
+├── .env.production           # Production config
+├── docker-compose.yml        # Docker setup
+└── requirements.txt          # Python dependencies
 ```
 
-### Step 2: Backend Setup
+## 🔑 Environment Files
 
-```bash
-cd attendance_system
+- **`.env.development`** - SQLite, console email, relaxed security
+- **`.env.production`** - PostgreSQL, SMTP, strict security
 
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies (dlib takes 5-10 min to compile)
-pip install --upgrade pip
-pip install -r ../requirements.txt
-
-# Setup database
-python manage.py migrate
-
-# Create admin user
-python manage.py createsuperuser
-
-# Collect static files
-python manage.py collectstatic --noinput
-```
-
-### Step 3: Frontend Setup
-
-```bash
-cd frontend
-
-# Copy environment file
-cp .env.example .env
+Copy and customize as needed. The system auto-loads based on `DJANGO_SETTINGS_MODULE`.
 
 # Install dependencies
 npm install

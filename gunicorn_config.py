@@ -45,9 +45,12 @@ ciphers = "HIGH:!aNULL:!MD5"
 
 # Application
 pythonpath = str(BASE_DIR)
-raw_env = [
-    "DJANGO_SETTINGS_MODULE=config.settings.production",
-]
+# DJANGO_SETTINGS_MODULE should be set via environment variable
+# Remove hardcoded production settings to allow flexibility
+
+# Response settings
+max_requests = 1000
+max_requests_jitter = 100
 
 # Hooks
 def post_fork(server, worker):
@@ -73,7 +76,3 @@ def worker_int(worker):
 def worker_abort(worker):
     """Handle worker abort"""
     worker.log.info("Worker received SIGABRT signal")
-
-# Response settings
-max_requests = 1000
-max_requests_jitter = 100

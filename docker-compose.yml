@@ -44,8 +44,7 @@ services:
       dockerfile: Dockerfile
     container_name: attendance_api
     command: >
-      sh -c "python attendance_system/manage.py migrate &&
-             gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 config.wsgi:application"
+      sh -c "python attendance_system/manage.py migrate &&             python manage.py collectstatic --noinput --clear &&             gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 config.wsgi:application"
     environment:
       DEBUG: ${DEBUG:-False}
       SECRET_KEY: ${SECRET_KEY}

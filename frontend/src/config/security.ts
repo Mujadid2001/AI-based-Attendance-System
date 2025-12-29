@@ -81,8 +81,6 @@ declare global {
   }
 }
 
-validateEnv()
-
 // Run validation on load
 validateEnv()
 
