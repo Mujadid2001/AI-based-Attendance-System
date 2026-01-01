@@ -72,6 +72,25 @@ class AIServiceManager:
                 # Don't raise - voice is optional
                 self._voice_notifier = None
     
+    def initialize_all_services(self):
+        """
+        Eagerly initialize all AI services.
+        This is called during Django startup for better first-request performance.
+        """
+        logger.info("Initializing all AI services (eager loading)...")
+        
+        # Initialize facial recognition pipeline
+        if not self._pipeline_initialized:
+            self._initialize_pipeline()
+            # Load all registered student faces
+            self.load_all_student_faces()
+        
+        # Initialize voice notifier
+        if not self._voice_initialized:
+            self._ensure_voice_initialized()
+        
+        logger.info("All AI services initialized and ready")
+    
     def get_pipeline(self):
         """Get facial recognition pipeline (lazy loads on first access)."""
         self._ensure_pipeline_initialized()

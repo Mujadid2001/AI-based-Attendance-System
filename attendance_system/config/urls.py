@@ -8,6 +8,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
+from django.shortcuts import render
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -30,6 +31,7 @@ def api_root(request):
             'students': '/api/students/',
             'attendance': '/api/attendance/',
             'ai': '/api/ai/',
+            'camera': '/api/camera/',
             'token': '/api/token/',
             'admin': '/admin/',
         },
@@ -49,10 +51,18 @@ def health_check(request):
     })
 
 
+def mobile_camera_view(request):
+    """Serve the mobile camera HTML interface."""
+    return render(request, 'camera.html')
+
+
 urlpatterns = [
     # API Root
     path('api/', api_root, name='api_root'),
     path('api/health/', health_check, name='health_check'),
+    
+    # Mobile Camera Interface
+    path('camera.html', mobile_camera_view, name='mobile_camera'),
     
     # Admin Panel (internal use only)
     path('admin/', admin.site.urls),
@@ -67,6 +77,7 @@ urlpatterns = [
     path('api/students/', include('apps.student.urls')),
     path('api/attendance/', include('apps.attendance.urls')),
     path('api/ai/', include('apps.ai_core.urls')),
+    path('api/camera/', include('apps.camera_integration.urls')),
 ]
 
 # Serve media files in development (user uploads, face images)

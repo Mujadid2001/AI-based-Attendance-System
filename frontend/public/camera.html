@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>External Camera - AI Attendance System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: #333;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 1rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            color: #667eea;
+            text-align: center;
+        }
+
+        .header p {
+            text-align: center;
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1rem;
+            max-width: 100%;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        #video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+
+        .face-guide {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 250px;
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+        }
+
+        .status-indicator {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            right: 1rem;
+            padding: 0.75rem;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.3s;
+        }
+
+        .status-connected {
+            background: rgba(16, 185, 129, 0.9);
+            color: white;
+        }
+
+        .status-disconnected {
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+        }
+
+        .status-processing {
+            background: rgba(59, 130, 246, 0.9);
+            color: white;
+        }
+
+        .controls {
+            margin-top: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .btn {
+            padding: 1rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #5568d3;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .result-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 1rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .result-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .result-icon.success {
+            background: #dcfce7;
+            color: #10b981;
+        }
+
+        .result-icon.error {
+            background: #fee2e2;
+            color: #ef4444;
+        }
+
+        .result-info {
+            flex: 1;
+        }
+
+        .result-info h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .result-info p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .confidence-bar {
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981, #059669);
+            transition: width 0.5s;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .stat-card {
+            background: #f9fafb;
+            padding: 0.75rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        .settings {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .setting-item:last-child {
+            border-bottom: none;
+        }
+
+        .switch {
+            position: relative;
+            width: 50px;
+            height: 28px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #667eea;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+
+        @media (max-width: 640px) {
+            .face-guide {
+                width: 150px;
+                height: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📸 External Camera</h1>
+        <p id="camera-name">Mobile Camera Interface</p>
+    </div>
+
+    <div class="container">
+        <div class="camera-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+            <div class="overlay">
+                <div class="face-guide"></div>
+                <div id="status" class="status-indicator status-disconnected">
+                    Initializing...
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" class="btn btn-primary" disabled>
+                🎥 Start Camera
+            </button>
+            <button id="captureBtn" class="btn btn-success" disabled>
+                📷 Capture & Recognize
+            </button>
+        </div>
+
+        <div id="result" style="display: none;" class="result-card">
+            <!-- Result will be inserted here -->
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="captureCount">0</div>
+                <div class="stat-label">Captures</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="recognizedCount">0</div>
+                <div class="stat-label">Recognized</div>
+            </div>
+        </div>
+
+        <div class="settings">
+            <h3 style="margin-bottom: 1rem;">Settings</h3>
+            <div class="setting-item">
+                <span>Auto Capture</span>
+                <label class="switch">
+                    <input type="checkbox" id="autoCapture">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="setting-item">
+                <span>Continuous Mode</span>
+                <label class="switch">
+                    <input type="checkbox" id="continuousMode">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get parameters from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const cameraId = window.location.pathname.split('/')[2];
+        const accessToken = urlParams.get('token');
+        
+        // Configuration
+        const API_BASE = window.location.origin;
+        const CAPTURE_INTERVAL = 3000; // 3 seconds for auto capture
+
+        // State
+        let stream = null;
+        let captureCount = 0;
+        let recognizedCount = 0;
+        let autoCaptureInterval = null;
+        let streamingInterval = null;
+        let isProcessing = false;
+
+        // Elements
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const statusDiv = document.getElementById('status');
+        const resultDiv = document.getElementById('result');
+        const autoCaptureToggle = document.getElementById('autoCapture');
+        const continuousModeToggle = document.getElementById('continuousMode');
+
+        // Initialize
+        async function init() {
+            if (!accessToken) {
+                updateStatus('error', 'Missing access token');
+                return;
+            }
+
+            updateStatus('connecting', 'Checking credentials...');
+
+            // Enable start button
+            startBtn.disabled = false;
+            startBtn.onclick = startCamera;
+        }
+
+        async function startCamera() {
+            try {
+                updateStatus('connecting', 'Starting camera...');
+                
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: 'user',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    updateStatus('connected', '✓ Camera Active');
+                    captureBtn.disabled = false;
+                    startBtn.disabled = true;
+                    
+                    // Start continuous streaming for laptop display
+                    startContinuousStreaming();
+                };
+
+            } catch (error) {
+                console.error('Camera error:', error);
+                updateStatus('error', 'Camera access denied');
+            }
+        }
+
+        // Continuous streaming for laptop display (sends frames every 500ms)
+        function startContinuousStreaming() {
+            if (streamingInterval) {
+                clearInterval(streamingInterval);
+            }
+            
+            streamingInterval = setInterval(async () => {
+                if (!stream) return;
+                
+                try {
+                    // Draw current frame to canvas
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    
+                    // Convert to blob
+                    const blob = await new Promise(resolve => 
+                        canvas.toBlob(resolve, 'image/jpeg', 0.7)
+                    );
+                    
+                    // Send to server (for streaming only, no recognition)
+                    const formData = new FormData();
+                    formData.append('image', blob, 'stream.jpg');
+                    formData.append('access_token', accessToken);
+                    
+                    // Use fetch with no-wait to avoid blocking
+                    fetch(`${API_BASE}/api/camera/sources/upload-frame/`, {
+                        method: 'POST',
+                        body: formData
+                    }).catch(() => {}); // Ignore errors for streaming
+                    
+                } catch (error) {
+                    // Silently ignore streaming errors
+                }
+            }, 500); // Send frame every 500ms for smooth streaming
+        }
+
+        captureBtn.onclick = captureAndRecognize;
+
+        async function captureAndRecognize() {
+            if (isProcessing) return;
+            
+            isProcessing = true;
+            updateStatus('processing', 'Processing...');
+            captureBtn.disabled = true;
+
+            try {
+                // Draw video frame to canvas
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Convert to blob
+                const blob = await new Promise(resolve => 
+                    canvas.toBlob(resolve, 'image/jpeg', 0.95)
+                );
+
+                // Create form data
+                const formData = new FormData();
+                formData.append('image', blob, 'capture.jpg');
+                formData.append('access_token', accessToken);
+                formData.append('timestamp', new Date().toISOString());
+
+                // Send to server
+                const response = await fetch(`${API_BASE}/api/camera/sources/upload-frame/`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                captureCount++;
+                document.getElementById('captureCount').textContent = captureCount;
+
+                if (data.success) {
+                    recognizedCount++;
+                    document.getElementById('recognizedCount').textContent = recognizedCount;
+                    showResult(data, true);
+                    updateStatus('connected', '✓ Face Recognized!');
+                } else {
+                    showResult(data, false);
+                    updateStatus('connected', '✗ Not Recognized');
+                }
+
+            } catch (error) {
+                console.error('Recognition error:', error);
+                updateStatus('error', 'Recognition failed');
+                showResult({ error: error.message }, false);
+            } finally {
+                isProcessing = false;
+                if (stream) {
+                    captureBtn.disabled = false;
+                }
+                
+                // Continue if continuous mode
+                if (continuousModeToggle.checked) {
+                    setTimeout(() => {
+                        if (!isProcessing) captureAndRecognize();
+                    }, 1000);
+                }
+            }
+        }
+
+        function updateStatus(type, message) {
+            statusDiv.className = 'status-indicator';
+            
+            if (type === 'connected') {
+                statusDiv.classList.add('status-connected');
+            } else if (type === 'error' || type === 'disconnected') {
+                statusDiv.classList.add('status-disconnected');
+            } else if (type === 'processing' || type === 'connecting') {
+                statusDiv.classList.add('status-processing');
+            }
+            
+            statusDiv.textContent = message;
+        }
+
+        function showResult(data, success) {
+            const icon = success ? '✓' : '✗';
+            const iconClass = success ? 'success' : 'error';
+            
+            let html = `
+                <div class="result-header">
+                    <div class="result-icon ${iconClass}">${icon}</div>
+                    <div class="result-info">
+                        <h3>${success ? 'Face Recognized!' : 'Not Recognized'}</h3>
+            `;
+            
+            if (success) {
+                const confidence = Math.round((data.confidence || 0) * 100);
+                html += `
+                        <p>${data.student?.name || 'Unknown'} (${data.student?.roll_number || 'N/A'})</p>
+                    </div>
+                </div>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" style="width: ${confidence}%"></div>
+                </div>
+                <p style="text-align: center; margin-top: 0.5rem; font-size: 0.9rem; color: #666;">
+                    Confidence: ${confidence}%
+                </p>
+                `;
+                
+                if (data.attendance_marked) {
+                    html += `<p style="text-align: center; margin-top: 0.5rem; color: #10b981; font-weight: 600;">✓ Attendance Marked</p>`;
+                }
+            } else {
+                html += `
+                        <p>${data.error || 'Face not recognized'}</p>
+                    </div>
+                </div>
+                `;
+            }
+            
+            resultDiv.innerHTML = html;
+            resultDiv.style.display = 'block';
+            
+            // Auto hide after 3 seconds if not successful
+            if (!success) {
+                setTimeout(() => {
+                    if (!continuousModeToggle.checked) {
+                        resultDiv.style.display = 'none';
+                    }
+                }, 3000);
+            }
+        }
+
+        // Auto capture mode
+        autoCaptureToggle.onchange = function() {
+            if (this.checked) {
+                autoCaptureInterval = setInterval(() => {
+                    if (!isProcessing && stream) {
+                        captureAndRecognize();
+                    }
+                }, CAPTURE_INTERVAL);
+            } else {
+                if (autoCaptureInterval) {
+                    clearInterval(autoCaptureInterval);
+                    autoCaptureInterval = null;
+                }
+            }
+        };
+
+        // Cleanup on page unload
+        window.onbeforeunload = function() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            if (autoCaptureInterval) {
+                clearInterval(autoCaptureInterval);
+            }
+            if (streamingInterval) {
+                clearInterval(streamingInterval);
+            }
+        };
+
+        // Start initialization
+        init();
+    </script>
+</body>
+</html>

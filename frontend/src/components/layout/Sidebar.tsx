@@ -12,6 +12,7 @@ import {
   IoSettings,
   IoChevronBack,
   IoPersonAdd,
+  IoPhonePortrait,
 } from 'react-icons/io5'
 
 interface SidebarProps {
@@ -30,6 +31,7 @@ const Sidebar = ({ isOpen, onToggle }: SidebarProps) => {
     { path: '/attendance', icon: IoCalendar, label: 'Attendance', roles: ['admin', 'teacher'] },
     { path: '/face-recognition', icon: IoCamera, label: 'Face Recognition', roles: ['admin', 'teacher'] },
     { path: '/face-registration', icon: IoPersonAdd, label: 'Face Registration', roles: ['admin', 'teacher'] },
+    { path: '/external-cameras', icon: IoPhonePortrait, label: 'External Cameras', roles: ['admin', 'teacher'] },
     { path: '/reports', icon: IoStatsChart, label: 'Reports', roles: ['admin', 'teacher'] },
     { path: '/settings', icon: IoSettings, label: 'Settings', roles: ['admin', 'teacher', 'student'] },
   ]

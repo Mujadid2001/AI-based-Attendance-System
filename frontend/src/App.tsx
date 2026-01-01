@@ -20,6 +20,7 @@ import Attendance from '@pages/attendance/Attendance'
 import AttendanceSession from '@pages/attendance/AttendanceSession'
 import FaceRecognition from '@pages/ai/FaceRecognition'
 import FaceRegistration from '@pages/ai/FaceRegistration'
+import ExternalCameras from '@pages/ai/ExternalCameras'
 import Reports from '@pages/reports/Reports'
 import Profile from '@pages/Profile'
 import EditProfile from '@pages/EditProfile'
@@ -59,6 +60,7 @@ function App() {
           {/* AI Features - Admin/Teacher Only */}
           <Route path="face-recognition" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><FaceRecognition /></RoleBasedRoute>} />
           <Route path="face-registration" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><FaceRegistration /></RoleBasedRoute>} />
+          <Route path="external-cameras" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><ExternalCameras /></RoleBasedRoute>} />
           
           {/* Reports - Admin/Teacher Only */}
           <Route path="reports" element={<RoleBasedRoute allowedRoles={['admin', 'teacher']}><Reports /></RoleBasedRoute>} />

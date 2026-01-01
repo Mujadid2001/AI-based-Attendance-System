@@ -30,7 +30,7 @@ class FaceQualityChecker:
     """Utility class for checking face image quality."""
     
     # Quality thresholds
-    MIN_BLUR_THRESHOLD = 15.0  # Laplacian variance threshold
+    MIN_BLUR_THRESHOLD = 5.0  # Laplacian variance threshold
     MIN_BRIGHTNESS = 30  # Minimum average brightness
     MAX_BRIGHTNESS = 230  # Maximum average brightness
     MIN_FACE_SIZE = (60, 60)  # Minimum face dimensions
@@ -220,3 +220,75 @@ class ImageProcessor:
         image_stream = BytesIO(image_bytes)
         image_array = np.asarray(bytearray(image_stream.read()), dtype=np.uint8)
         return cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+
+class DataAugmentation:
+    """Data augmentation utilities for face images."""
+    
+    @staticmethod
+    def rotate_image(image, angle: float):
+        """Rotate image by given angle."""
+        if not HAS_CV2:
+            return image
+        
+        try:
+            height, width = image.shape[:2]
+            center = (width // 2, height // 2)
+            rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+            rotated = cv2.warpAffine(image, rotation_matrix, (width, height))
+            return rotated
+        except Exception as e:
+            logger.error(f"Error rotating image: {e}")
+            return image
+    
+    @staticmethod
+    def adjust_brightness(image, factor: float):
+        """Adjust image brightness."""
+        if not HAS_CV2:
+            return image
+        
+        try:
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            hsv[:, :, 2] = np.clip(hsv[:, :, 2] * factor, 0, 255)
+            return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+        except Exception as e:
+            logger.error(f"Error adjusting brightness: {e}")
+            return image
+    
+    @staticmethod
+    def add_noise(image, intensity: float = 0.05):
+        """Add random noise to image."""
+        if not HAS_NUMPY:
+            return image
+        
+        try:
+            noise = np.random.normal(0, intensity * 255, image.shape).astype(np.uint8)
+            noisy_image = cv2.add(image, noise)
+            return noisy_image
+        except Exception as e:
+            logger.error(f"Error adding noise: {e}")
+            return image
+    
+    @staticmethod
+    def generate_augmentations(image, num_augmentations: int = 3):
+        """Generate augmented versions of the image."""
+        augmentations = []
+        
+        for i in range(num_augmentations):
+            augmented = image.copy()
+            
+            # Apply random rotation (-10 to 10 degrees)
+            angle = np.random.uniform(-10, 10)
+            augmented = DataAugmentation.rotate_image(augmented, angle)
+            
+            # Apply random brightness adjustment (0.8 to 1.2)
+            brightness_factor = np.random.uniform(0.8, 1.2)
+            augmented = DataAugmentation.adjust_brightness(augmented, brightness_factor)
+            
+            # Optionally add noise
+            if np.random.random() > 0.5:
+                augmented = DataAugmentation.add_noise(augmented, 0.02)
+            
+            augmentations.append(augmented)
+        
+        return augmentations

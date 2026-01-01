@@ -16,3 +16,4 @@ router.register(r'configuration', AIConfigurationViewSet, basename='configuratio
 urlpatterns = [
     path('', include(router.urls)),
 ]
+

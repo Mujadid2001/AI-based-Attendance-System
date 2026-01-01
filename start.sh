@@ -50,15 +50,15 @@ trap cleanup INT TERM
 
 # Start Backend
 echo -e "${YELLOW}Starting Django Backend...${NC}"
-cd attendance_system
 
 if [ ! -f "venv/bin/activate" ]; then
-    echo -e "${RED}[ERROR] Virtual environment not found${NC}"
+    echo -e "${RED}[ERROR] Virtual environment not found at root level${NC}"
     echo "Please run ./setup.sh first"
     exit 1
 fi
 
 source venv/bin/activate
+cd attendance_system
 export DJANGO_SETTINGS_MODULE=config.settings.development
 python manage.py runserver 0.0.0.0:8000 &
 BACKEND_PID=$!

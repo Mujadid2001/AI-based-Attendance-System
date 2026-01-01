@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'apps.student',
     'apps.attendance',
     'apps.ai_core',
+    'apps.camera_integration',
 ]
 
 MIDDLEWARE = [
@@ -211,3 +212,20 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# ===============================================
+# NETWORK CONFIGURATION FOR QR CODE GENERATION
+# ===============================================
+
+# Server Base URL for QR codes and external device integrations
+# In production: Set to your public domain (e.g., https://attendance.yourdomain.com)
+# In development: Leave empty for automatic local network IP detection
+# In Docker: Set to host machine's LAN IP or domain
+SERVER_BASE_URL = config('SERVER_BASE_URL', default=None)
+
+# Server Port (used for dynamic IP detection when SERVER_BASE_URL is not set)
+SERVER_PORT = config('SERVER_PORT', default='8000')
+
+# Force dynamic IP detection even when SERVER_BASE_URL is set
+# Useful for LAN-only production deployments where IP may change
+FORCE_DYNAMIC_IP_DETECTION = config('FORCE_DYNAMIC_IP_DETECTION', default=False, cast=bool)

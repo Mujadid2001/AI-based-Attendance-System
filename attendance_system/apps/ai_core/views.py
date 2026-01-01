@@ -396,3 +396,5 @@ class AIConfigurationViewSet(viewsets.ViewSet):
                 {'error': _('Failed to save training data.')},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+

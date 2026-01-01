@@ -17,7 +17,7 @@ class TestFacialRecognitionPipeline(unittest.TestCase):
         self.storage = TrainingDataStorage()
         self.pipeline = FacialRecognitionPipeline(
             storage=self.storage,
-            confidence_threshold=0.6,
+            confidence_threshold=0.4,
             enable_quality_checks=False  # Disable for basic tests
         )
     

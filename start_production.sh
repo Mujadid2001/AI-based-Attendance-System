@@ -19,14 +19,13 @@ if [ -z "$SECRET_KEY" ] || [ "$SECRET_KEY" = "GENERATE_A_SECURE_KEY_HERE_50_CHAR
     exit 1
 fi
 
-cd attendance_system
-
 if [ ! -f "venv/bin/activate" ]; then
     echo "ERROR: Run setup.sh first"
     exit 1
 fi
 
 source venv/bin/activate
+cd attendance_system
 
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput --clear

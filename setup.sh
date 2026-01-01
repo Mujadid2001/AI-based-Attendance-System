@@ -77,17 +77,24 @@ sudo apt install -y \
 echo -e "${GREEN}[OK] System dependencies installed${NC}"
 echo ""
 
-# Backend Setup
-echo -e "${YELLOW}[3/12] Setting up Python virtual environment...${NC}"
-cd attendance_system
+# Backend Setup - ROOT LEVEL VENV
+echo -e "${YELLOW}[3/12] Setting up Python virtual environment at root level...${NC}"
 
+# Remove old nested venv if exists
+if [ -d "attendance_system/venv" ]; then
+    echo "Removing old nested virtual environment..."
+    rm -rf attendance_system/venv
+    echo -e "${GREEN}[OK] Old venv removed${NC}"
+fi
+
+# Create root level venv
 if [ -d "venv" ]; then
-    echo "Removing existing virtual environment..."
+    echo "Removing existing root virtual environment..."
     rm -rf venv
 fi
 
 python3 -m venv venv
-echo -e "${GREEN}[OK] Virtual environment created${NC}"
+echo -e "${GREEN}[OK] Virtual environment created at root level${NC}"
 
 echo ""
 echo -e "${YELLOW}[4/12] Activating virtual environment...${NC}"
@@ -113,14 +120,14 @@ echo ""
 echo -e "${CYAN}Installing dlib (this will compile from source, may take 5-10 minutes)...${NC}"
 pip install dlib
 
-# Install other dependencies
-pip install -r ../requirements.txt
+# Install other dependencies from root requirements.txt
+pip install -r requirements.txt
 
 echo -e "${GREEN}[OK] Python dependencies installed${NC}"
 echo ""
 
 echo -e "${YELLOW}[7/12] Checking environment configuration...${NC}"
-if [ ! -f "../.env" ]; then
+if [ ! -f ".env" ]; then
     echo -e "${RED}[ERROR] .env file not found in root directory${NC}"
     echo "Please copy .env.example to .env and configure it"
     exit 1
@@ -128,15 +135,21 @@ fi
 echo -e "${GREEN}[OK] .env file found${NC}"
 echo ""
 
+# Change to attendance_system for migrations
+cd attendance_system
+
 echo -e "${YELLOW}[8/12] Running database migrations...${NC}"
 python manage.py makemigrations
 python manage.py migrate
 echo -e "${GREEN}[OK] Database migrations completed${NC}"
+cd ..
 echo ""
 
 echo -e "${YELLOW}[9/12] Collecting static files...${NC}"
+cd attendance_system
 python manage.py collectstatic --noinput
 echo -e "${GREEN}[OK] Static files collected${NC}"
+cd ..
 echo ""
 
 # Frontend Setup

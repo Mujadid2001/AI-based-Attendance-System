@@ -96,8 +96,8 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
         return queryset
 
     def destroy(self, request, *args, **kwargs):
-        """Delete student (admin only)."""
-        if not request.user.is_admin():
+        """Delete student (admin or teacher)."""
+        if not request.user.is_admin() and not request.user.is_teacher():
             return Response(
                 {'error': _('Permission denied.')},
                 status=status.HTTP_403_FORBIDDEN
@@ -105,9 +105,10 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
 
         student = self.get_object()
         roll = student.roll_number
-        response = super().destroy(request, *args, **kwargs)
-        logger.info(f"Student deleted: {roll}")
-        return response
+        user = student.user
+        user.delete()  # This will cascade delete the StudentProfile and all related data
+        logger.info(f"Student deleted: {roll} by {request.user.email}")
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=['get'])
     def enrollments(self, request, roll_number=None):

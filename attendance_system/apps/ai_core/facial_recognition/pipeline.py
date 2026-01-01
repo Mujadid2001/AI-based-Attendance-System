@@ -35,7 +35,7 @@ except ImportError:
 class FacialRecognitionPipeline:
     """Orchestrator for facial recognition operations."""
     
-    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.5, storage=None, enable_quality_checks=True):
+    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.4, storage=None, enable_quality_checks=True):
         """Initialize pipeline with lower confidence threshold for lower quality webcams."""
         self.confidence_threshold = confidence_threshold
         self.enable_quality_checks = enable_quality_checks
@@ -70,6 +70,14 @@ class FacialRecognitionPipeline:
                 self.face_detector = None
         else:
             self.face_detector = None
+        
+        # Initialize face aligner for better recognition
+        try:
+            from .alignment import FaceAligner
+            self.face_aligner = FaceAligner()
+        except Exception as e:
+            logger.warning(f"Could not initialize face aligner: {e}")
+            self.face_aligner = None
     
     def _convert_to_rgb(self, image):
         """Convert image to RGB format."""
@@ -94,7 +102,20 @@ class FacialRecognitionPipeline:
         
         try:
             rgb_image = self._convert_to_rgb(image)
-            face_locations = face_recognition.face_locations(rgb_image, model='hog')
+            
+            # Apply lighting normalization
+            if HAS_CV2 and len(rgb_image.shape) == 3:
+                # Convert to LAB color space for better lighting handling
+                lab = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2LAB)
+                l, a, b = cv2.split(lab)
+                # Apply CLAHE to L channel
+                clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+                l = clahe.apply(l)
+                # Merge and convert back
+                lab = cv2.merge([l, a, b])
+                rgb_image = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+            
+            face_locations = face_recognition.face_locations(rgb_image, model='cnn')
             
             if len(face_locations) == 0:
                 return None, "No face detected in image", None
@@ -110,8 +131,19 @@ class FacialRecognitionPipeline:
                     error_msg = "Image quality issues: " + "; ".join(quality_results['messages'])
                     return None, error_msg, face_location
             
-            # Extract encoding
-            encodings = face_recognition.face_encodings(rgb_image, face_locations)
+            # Align face for better recognition
+            aligned_face = image
+            if self.face_aligner:
+                aligned_face = self.face_aligner.align_face(image, face_location)
+                if aligned_face is not None:
+                    # Update face location for aligned image (full image now)
+                    face_location = (0, 0, aligned_face.shape[1], aligned_face.shape[0])
+                else:
+                    aligned_face = image
+            
+            # Extract encoding from aligned face
+            rgb_aligned = self._convert_to_rgb(aligned_face)
+            encodings = face_recognition.face_encodings(rgb_aligned, [face_location])
             if encodings:
                 return encodings[0], None, face_location
             else:
@@ -140,10 +172,31 @@ class FacialRecognitionPipeline:
             if error_msg:
                 return False, None, error_msg
             
-            # Store encoding with student ID
-            self.storage.add_encoding(student_id, encoding)
+            # Generate augmentations for robustness
+            from .utils import DataAugmentation
+            augmentations = DataAugmentation.generate_augmentations(image, num_augmentations=2)
             
-            return True, encoding, "Face registered successfully"
+            encodings = [encoding]  # Start with original
+            
+            # Extract encodings from augmentations
+            for aug_image in augmentations:
+                aug_encoding, _, _ = self._extract_face_encoding(aug_image, check_quality=False)
+                if aug_encoding is not None:
+                    encodings.append(aug_encoding)
+            
+            # Average encodings for better robustness
+            if len(encodings) > 1:
+                avg_encoding = np.mean(encodings, axis=0)
+                # Normalize to unit vector
+                avg_encoding = avg_encoding / np.linalg.norm(avg_encoding)
+                final_encoding = avg_encoding
+            else:
+                final_encoding = encoding
+            
+            # Store averaged encoding
+            self.storage.add_encoding(student_id, final_encoding)
+            
+            return True, final_encoding, "Face registered successfully"
         except Exception as e:
             logger.error(f"Error registering face: {e}")
             return False, None, f"Error: {str(e)}"
