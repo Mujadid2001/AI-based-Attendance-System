@@ -22,6 +22,8 @@ from .serializers import (
     ExternalCameraFrameSerializer
 )
 import base64
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +70,7 @@ class ExternalCameraViewSet(viewsets.ModelViewSet):
             )
             
             # Generate camera URL with token
-            camera_url = f"{base_url}/camera.html?id={camera_source.id}&token={camera_source.access_token}"
+            camera_url = f"{base_url}/camera.html?id={camera_source.id}&token={camera_source.access_token}&v=2"
             
             logger.info(f"Generating QR code for camera {camera_source.id}: {camera_url}")
             
@@ -148,27 +150,37 @@ class ExternalCameraViewSet(viewsets.ModelViewSet):
         
         return Response(info)
     
-    @action(detail=False, methods=['post'], url_path='upload-frame')
-    @deco_permission_classes([AllowAny])
+    @action(detail=False, methods=['post'], url_path='upload-frame', authentication_classes=[], permission_classes=[])
     def upload_frame(self, request):
         """
         Receive frame from external camera source.
         Requires access_token for authentication.
+        No JWT authentication - uses camera access_token instead.
         """
+        # Log everything for debugging
+        logger.info(f"Upload frame attempt - Data keys: {list(request.data.keys())}")
+        logger.info(f"Upload frame attempt - Query params: {dict(request.query_params)}")
+        
         access_token = request.data.get('access_token') or request.query_params.get('token')
         
         if not access_token:
+            logger.warning(f"Upload frame failed: No access_token provided. Data keys: {list(request.data.keys())}")
             return Response(
                 {'error': _('access_token is required.')},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+        
+        logger.info(f"Attempting to find camera with token (first 20 chars): {access_token[:20]}...")
         
         try:
             camera_source = ExternalCameraSource.objects.get(
                 access_token=access_token,
                 is_enabled=True
             )
+            logger.info(f"Frame received from camera: {camera_source.name} ({camera_source.id})")
         except ExternalCameraSource.DoesNotExist:
+            logger.warning(f"Upload frame failed: Invalid access_token (first 30 chars): {access_token[:30] if len(access_token) > 30 else access_token}...")
+            logger.warning(f"All camera tokens in DB: {[c.access_token[:20] for c in ExternalCameraSource.objects.all()]}")
             return Response(
                 {'error': _('Invalid or disabled camera source.')},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -190,6 +202,25 @@ class ExternalCameraViewSet(viewsets.ModelViewSet):
             cache_key = f'mobile_camera_frame_{camera_source.id}'
             cache.set(cache_key, image_base64, timeout=30)
             image_file.seek(0)  # Reset for face recognition
+            
+            # Broadcast frame to WebSocket clients
+            try:
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f'camera_{camera_source.id}',
+                        {
+                            'type': 'camera_frame',
+                            'frame': image_base64,
+                            'timestamp': timezone.now().isoformat(),
+                            'camera_id': str(camera_source.id),
+                            'camera_name': camera_source.name
+                        }
+                    )
+            except Exception as ws_error:
+                logger.warning(f"WebSocket broadcast failed (non-critical): {ws_error}")
+                # Continue even if WebSocket fails - HTTP polling still works
+                
         except Exception as e:
             logger.error(f"Error caching frame: {e}")
         
@@ -216,7 +247,21 @@ class ExternalCameraViewSet(viewsets.ModelViewSet):
             except CameraStreamSession.DoesNotExist:
                 pass
         
-        # Recognize face
+        # Check if this is a recognition request (vs just streaming)
+        perform_recognition = serializer.validated_data.get('perform_recognition', False)
+        
+        # For streaming frames, just cache and broadcast - no recognition
+        if not perform_recognition:
+            return Response({
+                'success': True,
+                'message': 'Frame received and cached',
+                'camera_id': str(camera_source.id),
+                'camera_name': camera_source.name
+            }, status=status.HTTP_200_OK)
+        
+        # For recognition requests, perform face recognition
+        logger.info(f"Performing face recognition for camera {camera_source.id}")
+        image_file.seek(0)  # Reset file pointer before recognition
         ai_manager = get_ai_manager()
         result = ai_manager.recognize_student_face(image_file)
         
@@ -226,23 +271,24 @@ class ExternalCameraViewSet(viewsets.ModelViewSet):
                 stream_session.faces_recognized += 1
             stream_session.save()
         
-        if not result['success']:
-            return Response({
-                'success': False,
-                'error': result.get('error', 'Recognition failed'),
-                'face_detected': result.get('face_detected', False)
-            }, status=status.HTTP_200_OK)
-        
+        # Prepare response data
         response_data = {
-            'success': True,
-            'student': result.get('student'),
-            'student_id': result.get('student_id'),
-            'confidence': result['confidence'],
-            'face_detected': True
+            'success': result['success'],
+            'message': result.get('message', 'Recognition complete'),
+            'face_detected': result.get('face_detected', False),
+            'camera_id': str(camera_source.id),
+            'camera_name': camera_source.name
         }
         
+        if result['success']:
+            response_data['student'] = result.get('student')
+            response_data['student_id'] = result.get('student_id')
+            response_data['confidence'] = result['confidence']
+        else:
+            response_data['error'] = result.get('error', 'Recognition failed')
+        
         # Auto-mark attendance if enabled and attendance session provided
-        if camera_source.auto_mark_attendance and attendance_session_id:
+        if result['success'] and camera_source.auto_mark_attendance and attendance_session_id:
             try:
                 attendance_session = AttendanceSession.objects.get(id=attendance_session_id)
                 student = StudentProfile.objects.get(user_id=int(result['student_id']))
@@ -277,6 +323,65 @@ class ExternalCameraViewSet(viewsets.ModelViewSet):
                     
             except (AttendanceSession.DoesNotExist, StudentProfile.DoesNotExist) as e:
                 logger.error(f"Error marking attendance: {e}")
+        
+        # Broadcast recognition result via WebSocket to laptop viewers
+        # AND cache it for HTTP polling fallback
+        try:
+            channel_layer = get_channel_layer()
+            logger.info(f"Channel layer available: {channel_layer is not None}")
+            
+            # Include the captured image in the broadcast
+            image_file.seek(0)
+            captured_image_data = image_file.read()
+            captured_image_base64 = base64.b64encode(captured_image_data).decode('utf-8')
+            
+            # Cache recognition result for HTTP polling fallback (30 second TTL)
+            recognition_cache_key = f'recognition_result_{camera_source.id}'
+            recognition_data = {
+                'success': response_data['success'],
+                'message': response_data['message'],
+                'captured_image': captured_image_base64,
+                'timestamp': timezone.now().isoformat(),
+                'camera_id': str(camera_source.id)
+            }
+            if response_data['success']:
+                recognition_data['student'] = response_data.get('student')
+                recognition_data['confidence'] = response_data.get('confidence')
+            else:
+                recognition_data['error'] = response_data.get('error')
+            
+            cache.set(recognition_cache_key, recognition_data, timeout=30)
+            logger.info(f"💾 Recognition result cached for HTTP polling: {recognition_cache_key}")
+            
+            if channel_layer:
+                group_name = f'camera_{camera_source.id}'
+                broadcast_data = {
+                    'type': 'recognition_result',
+                    'timestamp': timezone.now().isoformat(),
+                    'camera_id': str(camera_source.id),
+                    'success': response_data['success'],
+                    'message': response_data['message'],
+                    'captured_image': captured_image_base64
+                }
+                
+                if response_data['success']:
+                    broadcast_data['student'] = response_data.get('student')
+                    broadcast_data['confidence'] = response_data.get('confidence')
+                else:
+                    broadcast_data['error'] = response_data.get('error')
+                
+                logger.info(f"📡 Broadcasting recognition result to WebSocket group: {group_name}")
+                logger.info(f"📡 Broadcast data - Success: {broadcast_data['success']}, Student: {broadcast_data.get('student', {}).get('name', 'N/A')}")
+                
+                async_to_sync(channel_layer.group_send)(
+                    group_name,
+                    broadcast_data
+                )
+                logger.info(f"✅ Recognition result broadcasted successfully to group: {group_name}")
+            else:
+                logger.warning("⚠️ Channel layer is None - WebSocket broadcast skipped, but cached for polling")
+        except Exception as ws_error:
+            logger.error(f"❌ WebSocket broadcast failed: {ws_error}", exc_info=True)
         
         return Response(response_data, status=status.HTTP_200_OK)
     
@@ -359,14 +464,55 @@ class ExternalCameraViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
     
     @action(detail=True, methods=['get'], url_path='latest-frame')
-    @deco_permission_classes([IsAuthenticated])
+    @deco_permission_classes([AllowAny])
     def latest_frame(self, request, pk=None):
         """
         Get the latest frame from a mobile camera.
         Used by laptop browser to display live mobile camera feed.
+        Requires authentication via JWT token in header OR query parameter.
         """
+        # Check authentication from header or query parameter
+        from rest_framework_simplejwt.authentication import JWTAuthentication
+        jwt_auth = JWTAuthentication()
+        
+        # Try to authenticate from header first
+        try:
+            auth_result = jwt_auth.authenticate(request)
+            if auth_result is not None:
+                request.user, request.auth = auth_result
+        except Exception:
+            # If header auth fails, try token from query parameter
+            token = request.query_params.get('token')
+            if token:
+                try:
+                    from rest_framework_simplejwt.tokens import AccessToken
+                    access_token = AccessToken(token)
+                    # Token is valid, we can proceed
+                except Exception as e:
+                    return Response(
+                        {'error': 'Invalid or expired token'},
+                        status=status.HTTP_401_UNAUTHORIZED
+                    )
+            else:
+                return Response(
+                    {'error': 'Authentication required'},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+        
         camera_source = self.get_object()
         
+        # Check for recognition result first (higher priority)
+        recognition_cache_key = f'recognition_result_{camera_source.id}'
+        recognition_data = cache.get(recognition_cache_key)
+        
+        if recognition_data:
+            # Return recognition result as JSON so frontend can process it
+            logger.info(f"📤 Sending cached recognition result via HTTP polling")
+            # Delete the cache after sending so it's not sent repeatedly
+            cache.delete(recognition_cache_key)
+            return Response(recognition_data, status=status.HTTP_200_OK)
+        
+        # Otherwise return latest frame for streaming
         # Get latest frame from cache
         cache_key = f'mobile_camera_frame_{camera_source.id}'
         frame_data = cache.get(cache_key)

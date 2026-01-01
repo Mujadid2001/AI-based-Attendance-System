@@ -29,9 +29,7 @@ const StudentDetail = () => {
       // Fetch student enrollments
       setLoadingCourses(true);
       try {
-        console.log('Fetching enrollments for student ID:', id);
         const enrollmentsData = await courseService.getStudentEnrollments(parseInt(id, 10));
-        console.log('Enrollments data:', enrollmentsData);
         // Handle paginated response
         const enrollmentsList = Array.isArray(enrollmentsData) ? enrollmentsData : enrollmentsData.results || [];
         setEnrollments(enrollmentsList);
@@ -39,12 +37,10 @@ const StudentDetail = () => {
         // Fetch course details for each enrollment
         if (enrollmentsList.length > 0) {
           const courseIds = enrollmentsList.map(e => e.course);
-          console.log('Course IDs:', courseIds);
           const coursePromises = courseIds.map(courseId => 
             courseService.getCourse(courseId).catch(() => null)
           );
           const coursesData = await Promise.all(coursePromises);
-          console.log('Courses data:', coursesData);
           setCourses(coursesData.filter(c => c !== null) as Course[]);
         }
       } catch (error) {

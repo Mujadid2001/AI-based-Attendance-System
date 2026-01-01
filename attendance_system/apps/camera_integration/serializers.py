@@ -104,3 +104,4 @@ class ExternalCameraFrameSerializer(serializers.Serializer):
     attendance_session_id = serializers.IntegerField(required=False, allow_null=True)
     timestamp = serializers.DateTimeField(required=False, allow_null=True)
     metadata = serializers.JSONField(required=False, allow_null=True)
+    perform_recognition = serializers.BooleanField(required=False, default=False)

@@ -39,7 +39,6 @@ const Students = () => {
         params.course = parseInt(selectedCourse)
       }
       const response = await studentService.getStudents(params)
-      console.log('Students API response:', response)
       setStudents(response.results || response || [])
     } catch (error) {
       console.error('Failed to load students:', error)

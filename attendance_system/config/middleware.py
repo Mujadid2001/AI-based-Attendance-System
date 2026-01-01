@@ -49,6 +49,10 @@ class RateLimitMiddleware:
     def __call__(self, request):
         ip = self.get_client_ip(request)
         
+        # Skip rate limiting for camera frame endpoints (they poll frequently)
+        if '/camera/sources/' in request.path and '/latest-frame' in request.path:
+            return self.get_response(request)
+        
         # Check rate limit
         if self.is_rate_limited(ip):
             logger.warning(f"Rate limit exceeded for IP: {ip}")

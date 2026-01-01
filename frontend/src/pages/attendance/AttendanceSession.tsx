@@ -35,11 +35,9 @@ const AttendanceSessionDetail = () => {
     try {
       setLoading(true);
       const sessionData = await attendanceService.getSession(parseInt(id, 10));
-      console.log('Session data:', sessionData);
       setSession(sessionData);
 
       const recordsData = await attendanceService.getSessionRecords(parseInt(id, 10));
-      console.log('Loaded records:', recordsData.length);
       setRecords(recordsData);
 
       // Extract course ID - it can be either a number or an object with id
@@ -50,7 +48,6 @@ const AttendanceSessionDetail = () => {
       if (courseId) {
         const courseStudents = await courseService.getCourseEnrollments(courseId);
         const studentProfiles = courseStudents.map((enrollment: any) => enrollment.student);
-        console.log('Loaded students count:', studentProfiles.length);
         setStudents(studentProfiles);
       } else {
         console.error('No valid course ID found in session data');
@@ -67,8 +64,6 @@ const AttendanceSessionDetail = () => {
   const handleMarkAttendance = async (studentId: number, status: 'present' | 'absent' | 'leave') => {
     if (!id) return;
     
-    console.log('Marking attendance:', JSON.stringify({ sessionId: id, studentId, status }, null, 2));
-    
     try {
       // Check if attendance already exists for this student
       const existingRecord = records.find((r) => {
@@ -78,9 +73,6 @@ const AttendanceSessionDetail = () => {
       
       if (existingRecord) {
         // Update existing record
-        console.log('Updating existing record ID:', existingRecord.id);
-        console.log('Full existing record:', JSON.stringify(existingRecord, null, 2));
-        
         const updatedRecord = await attendanceService.updateAttendance(existingRecord.id, {
           status,
         });
@@ -88,13 +80,11 @@ const AttendanceSessionDetail = () => {
         toast.success('Attendance updated successfully.');
       } else {
         // Create new record
-        console.log('Creating new record');
         const payload = {
           session: parseInt(id, 10),
           student: studentId,
           status,
         };
-        console.log('Payload:', JSON.stringify(payload, null, 2));
         const newRecord = await attendanceService.markAttendance(payload);
         setRecords([...records, newRecord]);
         toast.success('Attendance marked successfully.');

@@ -342,22 +342,18 @@
                 🎥 Start Camera
             </button>
             <button id="captureBtn" class="btn btn-success" disabled>
-                📷 Capture & Recognize
+                📷 Capture & Send to Laptop
             </button>
-        </div>
-
-        <div id="result" style="display: none;" class="result-card">
-            <!-- Result will be inserted here -->
         </div>
 
         <div class="stats">
             <div class="stat-card">
                 <div class="stat-value" id="captureCount">0</div>
-                <div class="stat-label">Captures</div>
+                <div class="stat-label">Captures Sent</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="recognizedCount">0</div>
-                <div class="stat-label">Recognized</div>
+                <div class="stat-label">Status: Streaming</div>
             </div>
         </div>
 
@@ -383,8 +379,11 @@
     <script>
         // Get parameters from URL
         const urlParams = new URLSearchParams(window.location.search);
-        const cameraId = window.location.pathname.split('/')[2];
+        const cameraId = urlParams.get('id') || window.location.pathname.split('/').filter(Boolean).pop();
         const accessToken = urlParams.get('token');
+        
+        console.log('Camera ID:', cameraId);
+        console.log('Access Token:', accessToken ? 'Present' : 'Missing');
         
         // Configuration
         const API_BASE = window.location.origin;
@@ -495,7 +494,7 @@
             if (isProcessing) return;
             
             isProcessing = true;
-            updateStatus('processing', 'Processing...');
+            updateStatus('processing', '📸 Sending...');
             captureBtn.disabled = true;
 
             try {
@@ -507,37 +506,45 @@
                     canvas.toBlob(resolve, 'image/jpeg', 0.95)
                 );
 
-                // Create form data
+                // Create form data for recognition
                 const formData = new FormData();
                 formData.append('image', blob, 'capture.jpg');
-                formData.append('access_token', accessToken);
-                formData.append('timestamp', new Date().toISOString());
+                formData.append('camera_id', cameraId);
 
-                // Send to server
-                const response = await fetch(`${API_BASE}/api/camera/sources/upload-frame/`, {
+                console.log('Sending recognition request with camera_id:', cameraId);
+
+                // Send to recognition endpoint
+                const response = await fetch(`${API_BASE}/api/ai/face-recognition/recognize-only/`, {
                     method: 'POST',
                     body: formData
                 });
 
+                console.log('Recognition response status:', response.status);
+                
                 const data = await response.json();
+                console.log('Recognition response data:', data);
                 
                 captureCount++;
                 document.getElementById('captureCount').textContent = captureCount;
 
-                if (data.success) {
-                    recognizedCount++;
-                    document.getElementById('recognizedCount').textContent = recognizedCount;
-                    showResult(data, true);
-                    updateStatus('connected', '✓ Face Recognized!');
+                // Just show brief success feedback - results displayed on laptop only
+                if (response.ok) {
+                    updateStatus('connected', '✓ Sent to laptop');
                 } else {
-                    showResult(data, false);
-                    updateStatus('connected', '✗ Not Recognized');
+                    updateStatus('error', '✗ Send failed');
                 }
+                
+                // Reset status after 1.5 seconds
+                setTimeout(() => {
+                    updateStatus('connected', '📱 Ready to capture');
+                }, 1500);
 
             } catch (error) {
                 console.error('Recognition error:', error);
-                updateStatus('error', 'Recognition failed');
-                showResult({ error: error.message }, false);
+                updateStatus('error', '✗ Failed to send');
+                setTimeout(() => {
+                    updateStatus('connected', '📱 Ready to capture');
+                }, 1500);
             } finally {
                 isProcessing = false;
                 if (stream) {

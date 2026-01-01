@@ -101,7 +101,6 @@ const CourseDetail = () => {
         }
       } catch (error) {
         // Enrollments endpoint might not exist, just continue
-        console.log('Could not fetch enrollments:', error)
         setStudents([])
       }
     } catch (error: any) {

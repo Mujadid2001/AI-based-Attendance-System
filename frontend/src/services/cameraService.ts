@@ -149,6 +149,15 @@ class CameraService {
     });
     return response.data;
   }
+
+  /**
+   * Get latest frame from mobile camera for live streaming
+   * Returns a URL that can be used as an image src
+   */
+  getLatestFrameUrl(cameraId: string): string {
+    const token = localStorage.getItem('accessToken');
+    return `${api.defaults.baseURL}/camera/sources/${cameraId}/latest-frame/?t=${Date.now()}&token=${token}`;
+  }
 }
 
 export const cameraService = new CameraService();

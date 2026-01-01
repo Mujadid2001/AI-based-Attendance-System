@@ -88,6 +88,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
+# ASGI Application for WebSocket support
+ASGI_APPLICATION = 'config.asgi.application'
+
+# Channels Configuration
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [(
+                config('REDIS_HOST', default='127.0.0.1'),
+                config('REDIS_PORT', default=6379, cast=int)
+            )],
+        },
+    },
+}
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {

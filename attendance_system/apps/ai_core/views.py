@@ -189,8 +189,10 @@ class FaceRecognitionViewSet(viewsets.ViewSet):
     def recognize_only(self, request):
         """
         Only recognize face without marking attendance.
+        Broadcasts results via WebSocket if camera_id is provided.
         """
         image_file = request.FILES.get('image')
+        camera_id = request.data.get('camera_id')
         
         if not image_file:
             return Response(
@@ -199,8 +201,69 @@ class FaceRecognitionViewSet(viewsets.ViewSet):
             )
         
         # Recognize face
-        ai_manager = get_ai_manager()
-        result = ai_manager.recognize_student_face(image_file)
+        try:
+            ai_manager = get_ai_manager()
+            result = ai_manager.recognize_student_face(image_file)
+        except Exception as e:
+            logger.error(f"Error recognizing face: {e}", exc_info=True)
+            result = {
+                'success': False,
+                'error': 'No face detected in image. Please ensure your face is clearly visible.',
+                'face_detected': False
+            }
+        
+        # Broadcast result via WebSocket to laptop viewers if camera_id provided
+        if camera_id:
+            try:
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                from django.utils import timezone
+                import base64
+                
+                logger.info(f"Broadcasting recognition result for camera_id: {camera_id}")
+                
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    # Convert image to base64 for display
+                    image_file.seek(0)
+                    image_data = image_file.read()
+                    image_base64 = base64.b64encode(image_data).decode('utf-8')
+                    
+                    # Prepare result data
+                    recognition_data = {
+                        'type': 'recognition_result',
+                        'timestamp': timezone.now().isoformat(),
+                        'camera_id': camera_id,
+                        'success': result['success'],
+                        'captured_image': image_base64
+                    }
+                    
+                    if result['success']:
+                        recognition_data.update({
+                            'student': result.get('student'),
+                            'confidence': result['confidence'],
+                            'message': 'Face recognized successfully.'
+                        })
+                        logger.info(f"Broadcasting SUCCESS: {result.get('student')}")
+                    else:
+                        recognition_data.update({
+                            'error': result.get('error', 'Recognition failed'),
+                            'message': result.get('error', 'Face not recognized')
+                        })
+                        logger.info(f"Broadcasting FAILURE: {result.get('error')}")
+                    
+                    # Broadcast to camera group
+                    group_name = f'camera_{camera_id}'
+                    logger.info(f"Sending to WebSocket group: {group_name}")
+                    async_to_sync(channel_layer.group_send)(
+                        group_name,
+                        recognition_data
+                    )
+                    logger.info(f"WebSocket broadcast complete for camera: {camera_id}")
+                else:
+                    logger.warning("Channel layer not configured!")
+            except Exception as e:
+                logger.error(f"WebSocket broadcast failed: {e}", exc_info=True)
         
         if result['success']:
             return Response(

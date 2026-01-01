@@ -130,14 +130,6 @@ If you didn't create an account, please ignore this email.
 © 2025 AI Attendance System. All rights reserved.
         """
         
-        # Debug logging
-        logger.info(f"DEBUG: EMAIL_BACKEND = {settings.EMAIL_BACKEND}")
-        logger.info(f"DEBUG: EMAIL_HOST = {settings.EMAIL_HOST}")
-        logger.info(f"DEBUG: EMAIL_PORT = {settings.EMAIL_PORT}")
-        logger.info(f"DEBUG: EMAIL_USE_TLS = {settings.EMAIL_USE_TLS}")
-        logger.info(f"DEBUG: DEFAULT_FROM_EMAIL = {settings.DEFAULT_FROM_EMAIL}")
-        logger.info(f"DEBUG: Sending email to {user.email}")
-        
         # Send email
         send_mail(
             subject=subject,

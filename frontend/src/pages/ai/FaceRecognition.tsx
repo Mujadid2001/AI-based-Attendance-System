@@ -21,12 +21,17 @@ const FaceRecognition = () => {
   const [showQRModal, setShowQRModal] = useState(false)
   const [mobileFrameUrl, setMobileFrameUrl] = useState<string | null>(null)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const websocketRef = useRef<WebSocket | null>(null)
+  const [useWebSocket, setUseWebSocket] = useState(true) // Prefer WebSocket over polling
 
   useEffect(() => {
     loadMobileCameras()
     return () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
+      }
+      if (websocketRef.current) {
+        websocketRef.current.close()
       }
     }
   }, [])
@@ -47,11 +52,51 @@ const FaceRecognition = () => {
       clearInterval(pollingIntervalRef.current)
     }
 
-    // Poll for latest frame every 500ms
+    // Poll for latest frame every 500ms for smooth streaming
     pollingIntervalRef.current = setInterval(async () => {
       try {
-        const frameUrl = `${cameraService.getQRCodeUrl(cameraId).replace('/qr-code/', '/latest-frame/')}?t=${Date.now()}`
-        setMobileFrameUrl(frameUrl)
+        const frameUrl = cameraService.getLatestFrameUrl(cameraId)
+        
+        // Fetch the frame/result
+        const response = await fetch(frameUrl)
+        
+        // Check if response is JSON (recognition result) or image
+        const contentType = response.headers.get('content-type')
+        
+        if (contentType?.includes('application/json')) {
+          // Recognition result received via polling!
+          const data = await response.json()
+          
+          // Stop processing state if it was set
+          setIsProcessing(false)
+          
+          // Set captured image
+          if (data.captured_image) {
+            setCapturedImage(`data:image/jpeg;base64,${data.captured_image}`)
+          }
+          
+          // Transform and display result
+          const transformedResult = {
+            recognized: data.success,
+            student_name: data.student?.name || 'Unknown',
+            student_id: data.student?.roll_number || 'N/A',
+            confidence: Math.round((data.confidence || 0) * 100),
+            message: data.message || (data.success ? 'Face recognized successfully' : 'Face not recognized')
+          }
+          
+          setRecognitionResult(transformedResult)
+          
+          // Show toast notification on laptop
+          if (data.success) {
+            toast.success(`📱 Mobile: Recognized ${transformedResult.student_name}`)
+          } else {
+            toast.error(`📱 Mobile: ${data.error || 'Face not recognized'}`)
+          }
+        } else if (response.status === 200) {
+          // Regular frame image
+          setMobileFrameUrl(frameUrl)
+        }
+        // 204 = no content, just continue polling
       } catch (error) {
         console.error('Failed to fetch mobile frame:', error)
       }
@@ -62,6 +107,89 @@ const FaceRecognition = () => {
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current)
       pollingIntervalRef.current = null
+    }
+    setMobileFrameUrl(null)
+  }
+
+  const connectWebSocket = (cameraId: string) => {
+    // Close existing connection
+    if (websocketRef.current) {
+      websocketRef.current.close()
+    }
+
+    // Get WebSocket URL (convert http/https to ws/wss)
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const wsProtocol = apiUrl.startsWith('https') ? 'wss' : 'ws'
+    const wsHost = apiUrl.replace(/^https?:\/\//, '')
+    const wsUrl = `${wsProtocol}://${wsHost}/ws/camera/${cameraId}/`
+
+    const ws = new WebSocket(wsUrl)
+    
+    ws.onopen = () => {
+      toast.success('Connected to mobile camera')
+    }
+    
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        
+        // Handle real-time frame updates
+        if (data.type === 'frame' && data.frame) {
+          setMobileFrameUrl(`data:image/jpeg;base64,${data.frame}`)
+        }
+        
+        // Handle recognition results from mobile capture
+        if (data.type === 'recognition_result') {
+          // Stop processing state if it was set
+          setIsProcessing(false)
+          
+          // Set captured image - this displays the captured photo on laptop
+          if (data.captured_image) {
+            setCapturedImage(`data:image/jpeg;base64,${data.captured_image}`)
+          }
+          
+          // Transform and display result in the same format as webcam results
+          const transformedResult = {
+            recognized: data.success,
+            student_name: data.student?.name || 'Unknown',
+            student_id: data.student?.roll_number || 'N/A',
+            confidence: Math.round((data.confidence || 0) * 100),
+            message: data.message || (data.success ? 'Face recognized successfully' : 'Face not recognized')
+          }
+          
+          setRecognitionResult(transformedResult)
+          
+          // Show toast notification on laptop
+          if (data.success) {
+            toast.success(`📱 Mobile: Recognized ${transformedResult.student_name}`)
+          } else {
+            toast.error(`📱 Mobile: ${data.error || 'Face not recognized'}`)
+          }
+        }
+      } catch (error) {
+        console.error('WebSocket message error:', error)
+      }
+    }
+    
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+      toast.error('Camera connection error. Falling back to polling...')
+      // Fallback to HTTP polling
+      setUseWebSocket(false)
+      startMobileCameraPolling(cameraId)
+    }
+    
+    ws.onclose = () => {
+      // WebSocket disconnected
+    }
+
+    websocketRef.current = ws
+  }
+
+  const disconnectWebSocket = () => {
+    if (websocketRef.current) {
+      websocketRef.current.close()
+      websocketRef.current = null
     }
     setMobileFrameUrl(null)
   }
@@ -77,26 +205,43 @@ const FaceRecognition = () => {
         setCameraSource('webcam')
       } else if (mobileCameras.length === 1) {
         setSelectedMobileCamera(mobileCameras[0])
-        startMobileCameraPolling(mobileCameras[0].id)
+        // Try WebSocket first, fallback to polling if it fails
+        if (useWebSocket) {
+          connectWebSocket(mobileCameras[0].id)
+        } else {
+          startMobileCameraPolling(mobileCameras[0].id)
+        }
       }
     } else {
+      // Cleanup when switching away from mobile
       stopMobileCameraPolling()
+      disconnectWebSocket()
       setSelectedMobileCamera(null)
     }
   }
 
   const handleMobileCameraSelect = (camera: ExternalCamera) => {
     setSelectedMobileCamera(camera)
-    startMobileCameraPolling(camera.id)
+    // Try WebSocket first, fallback to polling if it fails
+    if (useWebSocket) {
+      connectWebSocket(camera.id)
+    } else {
+      startMobileCameraPolling(camera.id)
+    }
   }
 
   const captureAndRecognize = useCallback(async () => {
+    // Only allow laptop-initiated capture for webcam source
+    // For mobile camera, recognition is triggered from the mobile device
+    if (cameraSource === 'mobile') {
+      toast.info('📱 Please use the Capture button on your mobile device')
+      return
+    }
+
     let imageSrc: string | null = null
 
     if (cameraSource === 'webcam') {
       imageSrc = webcamRef.current?.getScreenshot() || null
-    } else if (cameraSource === 'mobile' && mobileFrameUrl) {
-      imageSrc = mobileFrameUrl
     }
 
     if (!imageSrc) {
@@ -285,15 +430,30 @@ const FaceRecognition = () => {
 
           <div className="mt-4 flex gap-4">
             {!capturedImage ? (
-              <Button
-                onClick={captureAndRecognize}
-                isLoading={isProcessing}
-                fullWidth
-                size="lg"
-              >
-                <IoCamera className="w-5 h-5 mr-2" />
-                Capture & Recognize
-              </Button>
+              <>
+                {cameraSource === 'webcam' ? (
+                  <Button
+                    onClick={captureAndRecognize}
+                    isLoading={isProcessing}
+                    fullWidth
+                    size="lg"
+                  >
+                    <IoCamera className="w-5 h-5 mr-2" />
+                    Capture & Recognize
+                  </Button>
+                ) : (
+                  <div className="w-full p-4 bg-blue-50 border-2 border-blue-300 rounded-lg text-center">
+                    <IoPhonePortrait className="w-8 h-8 mx-auto mb-2 text-blue-600" />
+                    <p className="text-blue-900 font-semibold">Mobile Camera Mode</p>
+                    <p className="text-blue-700 text-sm mt-1">
+                      Use the "Capture & Recognize" button on your mobile device
+                    </p>
+                    <p className="text-blue-600 text-xs mt-2">
+                      Results will appear here automatically
+                    </p>
+                  </div>
+                )}
+              </>
             ) : (
               <Button onClick={reset} variant="outline" fullWidth size="lg">
                 Take Another Photo
@@ -408,28 +568,65 @@ const FaceRecognition = () => {
       {/* Instructions */}
       <Card>
         <h2 className="text-xl font-semibold mb-4">Instructions</h2>
-        <ul className="space-y-2 text-gray-600">
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">1.</span>
-            <span>Position your face clearly in front of the camera</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">2.</span>
-            <span>Ensure good lighting conditions</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">3.</span>
-            <span>Look directly at the camera</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">4.</span>
-            <span>Click "Capture & Recognize" to start face recognition</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">5.</span>
-            <span>The system will automatically identify you and mark attendance</span>
-          </li>
-        </ul>
+        {cameraSource === 'webcam' ? (
+          <ul className="space-y-2 text-gray-600">
+            <li className="flex items-start gap-2">
+              <span className="text-primary-600 font-bold">1.</span>
+              <span>Position your face clearly in front of the camera</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-primary-600 font-bold">2.</span>
+              <span>Ensure good lighting conditions</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-primary-600 font-bold">3.</span>
+              <span>Look directly at the camera</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-primary-600 font-bold">4.</span>
+              <span>Click "Capture & Recognize" to start face recognition</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-primary-600 font-bold">5.</span>
+              <span>The system will automatically identify you and mark attendance</span>
+            </li>
+          </ul>
+        ) : (
+          <ul className="space-y-2 text-gray-600">
+            <li className="flex items-start gap-2">
+              <span className="text-blue-600 font-bold">📱</span>
+              <span>
+                <strong>Mobile Camera Mode:</strong> Your phone acts as an external camera
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-600 font-bold">1.</span>
+              <span>Open the camera interface on your mobile device (scan QR code)</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-600 font-bold">2.</span>
+              <span>Position your face clearly and ensure good lighting</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-600 font-bold">3.</span>
+              <span>
+                Click <strong>"Capture & Recognize"</strong> on your mobile device
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-600 font-bold">4.</span>
+              <span>
+                Results will automatically appear on this laptop screen in real-time
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-600 font-bold">✨</span>
+              <span className="text-sm">
+                Live video feed is streamed to laptop, but capture happens on mobile
+              </span>
+            </li>
+          </ul>
+        )}
       </Card>
 
       {/* QR Code Modal */}

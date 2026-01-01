@@ -159,6 +159,15 @@
             color: white;
         }
 
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #4b5563;
+        }
+
         .result-card {
             background: white;
             border-radius: 12px;
@@ -341,6 +350,9 @@
             <button id="startBtn" class="btn btn-primary" disabled>
                 🎥 Start Camera
             </button>
+            <button id="switchCameraBtn" class="btn btn-secondary" disabled style="display: none;">
+                🔄 Switch Camera
+            </button>
             <button id="captureBtn" class="btn btn-success" disabled>
                 📷 Capture & Recognize
             </button>
@@ -383,7 +395,7 @@
     <script>
         // Get parameters from URL
         const urlParams = new URLSearchParams(window.location.search);
-        const cameraId = window.location.pathname.split('/')[2];
+        const cameraId = urlParams.get('id');
         const accessToken = urlParams.get('token');
         
         // Configuration
@@ -403,65 +415,113 @@
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         const startBtn = document.getElementById('startBtn');
+        const switchCameraBtn = document.getElementById('switchCameraBtn');
         const captureBtn = document.getElementById('captureBtn');
         const statusDiv = document.getElementById('status');
         const resultDiv = document.getElementById('result');
         const autoCaptureToggle = document.getElementById('autoCapture');
         const continuousModeToggle = document.getElementById('continuousMode');
 
+        // Camera state
+        let currentFacingMode = 'user'; // 'user' for front camera, 'environment' for back camera
+
         // Initialize
         async function init() {
-            if (!accessToken) {
-                updateStatus('error', 'Missing access token');
+            console.log('Initializing camera page...');
+            console.log('Camera ID:', cameraId);
+            console.log('Access Token:', accessToken ? `${accessToken.substring(0, 20)}...` : 'Missing');
+            
+            if (!cameraId || !accessToken) {
+                updateStatus('error', 'Missing camera ID or access token');
+                console.error('Missing required parameters');
                 return;
             }
 
-            updateStatus('connecting', 'Checking credentials...');
-
-            // Enable start button
+            updateStatus('connecting', 'Ready - Click Start Camera');
             startBtn.disabled = false;
-            startBtn.onclick = startCamera;
+            console.log('Initialization complete');
         }
 
-        async function startCamera() {
+        startBtn.onclick = () => startCamera();
+
+        // Start camera with optional facing mode
+        async function startCamera(facingMode = null) {
             try {
+                console.log('Starting camera with facing mode:', facingMode || currentFacingMode);
                 updateStatus('connecting', 'Starting camera...');
                 
+                // Stop existing stream if any
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    if (streamingInterval) {
+                        clearInterval(streamingInterval);
+                        streamingInterval = null;
+                    }
+                }
+                
+                // Use provided facingMode or current one
+                if (facingMode) {
+                    currentFacingMode = facingMode;
+                }
+                
+                console.log('Requesting camera access...');
                 stream = await navigator.mediaDevices.getUserMedia({
                     video: { 
-                        facingMode: 'user',
+                        facingMode: currentFacingMode,
                         width: { ideal: 1280 },
                         height: { ideal: 720 }
                     }
                 });
 
+                console.log('Camera access granted, setting video source...');
                 video.srcObject = stream;
                 
                 video.onloadedmetadata = () => {
+                    console.log('Video metadata loaded, dimensions:', video.videoWidth, 'x', video.videoHeight);
                     canvas.width = video.videoWidth;
                     canvas.height = video.videoHeight;
-                    updateStatus('connected', '✓ Camera Active');
+                    
+                    // Update button states
+                    const cameraName = currentFacingMode === 'user' ? '📱 Front Camera' : '📷 Back Camera';
+                    updateStatus('connected', `✓ ${cameraName} Active`);
                     captureBtn.disabled = false;
                     startBtn.disabled = true;
+                    switchCameraBtn.disabled = false;
+                    switchCameraBtn.style.display = 'flex';
                     
+                    console.log('Starting continuous streaming...');
                     // Start continuous streaming for laptop display
                     startContinuousStreaming();
                 };
 
             } catch (error) {
                 console.error('Camera error:', error);
-                updateStatus('error', 'Camera access denied');
+                updateStatus('error', 'Camera access denied: ' + error.message);
             }
         }
 
+        // Switch between front and back cameras
+        async function switchCamera() {
+            const newFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            await startCamera(newFacingMode);
+        }
+
+        // Set up switch camera button
+        switchCameraBtn.onclick = switchCamera;
+
         // Continuous streaming for laptop display (sends frames every 500ms)
         function startContinuousStreaming() {
+            console.log('Starting continuous streaming to server...');
             if (streamingInterval) {
                 clearInterval(streamingInterval);
             }
             
+            let frameCount = 0;
             streamingInterval = setInterval(async () => {
-                if (!stream) return;
+                if (!stream) {
+                    console.warn('No stream available for streaming');
+                    return;
+                }
                 
                 try {
                     // Draw current frame to canvas
@@ -472,6 +532,11 @@
                         canvas.toBlob(resolve, 'image/jpeg', 0.7)
                     );
                     
+                    frameCount++;
+                    if (frameCount % 10 === 0) {
+                        console.log(`Streamed ${frameCount} frames`);
+                    }
+                    
                     // Send to server (for streaming only, no recognition)
                     const formData = new FormData();
                     formData.append('image', blob, 'stream.jpg');
@@ -481,10 +546,21 @@
                     fetch(`${API_BASE}/api/camera/sources/upload-frame/`, {
                         method: 'POST',
                         body: formData
-                    }).catch(() => {}); // Ignore errors for streaming
+                    }).then(response => {
+                        if (frameCount % 10 === 0) {
+                            console.log(`Upload response: ${response.status} - ${response.statusText}`);
+                        }
+                        return response.text();
+                    }).then(text => {
+                        if (frameCount % 10 === 0) {
+                            console.log('Response body:', text);
+                        }
+                    }).catch(err => {
+                        console.error('Streaming error (frame ' + frameCount + '):', err);
+                    });
                     
                 } catch (error) {
-                    // Silently ignore streaming errors
+                    console.error('Frame capture error:', error);
                 }
             }, 500); // Send frame every 500ms for smooth streaming
         }
@@ -499,6 +575,7 @@
             captureBtn.disabled = true;
 
             try {
+                console.log('Capturing frame for recognition...');
                 // Draw video frame to canvas
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 
@@ -511,15 +588,22 @@
                 const formData = new FormData();
                 formData.append('image', blob, 'capture.jpg');
                 formData.append('access_token', accessToken);
+                formData.append('perform_recognition', 'true');  // Signal to perform recognition
                 formData.append('timestamp', new Date().toISOString());
 
+                console.log('Sending recognition request to server...');
                 // Send to server
                 const response = await fetch(`${API_BASE}/api/camera/sources/upload-frame/`, {
                     method: 'POST',
                     body: formData
                 });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const data = await response.json();
+                console.log('Recognition response received:', data);
                 
                 captureCount++;
                 document.getElementById('captureCount').textContent = captureCount;
@@ -536,7 +620,7 @@
 
             } catch (error) {
                 console.error('Recognition error:', error);
-                updateStatus('error', 'Recognition failed');
+                updateStatus('error', 'Recognition failed: ' + error.message);
                 showResult({ error: error.message }, false);
             } finally {
                 isProcessing = false;
