@@ -146,10 +146,18 @@ export interface FaceRecognitionResult {
 
 // Report Types
 export interface AttendanceReport {
-  student: StudentProfile
-  course: Course
-  stats: AttendanceStats
-  records: AttendanceRecord[]
+  id: number
+  date: string
+  start_time: string
+  end_time: string | null
+  course_code: string
+  course_name: string
+  total_students: number
+  present_count: number
+  leave_count: number
+  absent_count: number
+  excused_count: number
+  attendance_percentage: number
 }
 
 // API Response Types

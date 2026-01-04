@@ -92,6 +92,8 @@ api.interceptors.response.use(
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${access}`
         }
+        
+        // Return the retry promise directly (this prevents the 401 from propagating)
         return api(originalRequest)
       } catch (refreshError) {
         // Refresh token failed - logout user
@@ -99,9 +101,12 @@ api.interceptors.response.use(
         localStorage.removeItem('refreshToken')
         localStorage.removeItem('user')
         
-        // Redirect to login page
-        window.location.href = '/login'
-        toast.error('Session expired. Please login again.')
+        // Only show error if not already on login page
+        if (!window.location.pathname.includes('/login')) {
+          toast.error('Session expired. Please login again.')
+          // Redirect to login page
+          window.location.href = '/login'
+        }
         
         return Promise.reject(refreshError)
       }
@@ -110,7 +115,7 @@ api.interceptors.response.use(
     // Handle other errors
     const errorMessage = getErrorMessage(error)
     
-    // Don't show toast for certain error codes (handled in components)
+    // Don't show toast for 401 errors (handled above) or 404 (handled in components)
     const silentErrors = [401, 404]
     if (!silentErrors.includes(error.response?.status || 0)) {
       toast.error(errorMessage)

@@ -411,7 +411,7 @@ class AttendanceReportViewSet(viewsets.ReadOnlyModelViewSet):
     
     @action(detail=False, methods=['post'])
     def generate_report(self, request):
-        """Generate attendance report for course and date range."""
+        """Generate session-based attendance report for course and date range."""
         course_id = request.data.get('course')
         start_date = request.data.get('start_date')
         end_date = request.data.get('end_date')
@@ -426,71 +426,85 @@ class AttendanceReportViewSet(viewsets.ReadOnlyModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Get all enrolled students
-        students = StudentProfile.objects.filter(
+        # Get all attendance sessions in the date range
+        sessions = AttendanceSession.objects.filter(
+            course=course,
+            date__range=[start, end]
+        ).order_by('-date', '-start_time')
+        
+        # Get total enrolled students for percentage calculation
+        total_students = StudentProfile.objects.filter(
             enrollments__course=course,
             enrollments__is_active=True
-        ).distinct()
+        ).distinct().count()
         
-        reports = []
-        for student in students:
-            sessions = AttendanceSession.objects.filter(
-                course=course,
-                date__range=[start, end]
-            )
-            
-            attendances = Attendance.objects.filter(
-                session__in=sessions,
-                student=student
-            )
+        # Build session-wise report
+        report_data = []
+        for session in sessions:
+            attendances = Attendance.objects.filter(session=session)
             
             present = attendances.filter(status=Attendance.Status.PRESENT).count()
-            late = attendances.filter(status=Attendance.Status.LATE).count()
+            leave = attendances.filter(status=Attendance.Status.LEAVE).count()
             absent = attendances.filter(status=Attendance.Status.ABSENT).count()
             excused = attendances.filter(status=Attendance.Status.EXCUSED).count()
-            total = sessions.count()
             
-            percentage = ((present + late) / total * 100) if total > 0 else 0
+            # Calculate percentage (present + leave as considered attended)
+            attended = present + leave
+            percentage = (attended / total_students * 100) if total_students > 0 else 0
             
-            report, _ = AttendanceReport.objects.update_or_create(
-                course=course,
-                student=student,
-                start_date=start,
-                end_date=end,
-                defaults={
-                    'total_sessions': total,
-                    'present_count': present,
-                    'late_count': late,
-                    'absent_count': absent,
-                    'excused_count': excused,
-                    'attendance_percentage': percentage,
-                    'generated_by': request.user
-                }
-            )
-            reports.append(report)
+            report_data.append({
+                'id': session.id,
+                'date': session.date,
+                'start_time': session.start_time,
+                'end_time': session.end_time,
+                'course_code': course.code,
+                'course_name': course.name,
+                'total_students': total_students,
+                'present_count': present,
+                'leave_count': leave,
+                'absent_count': absent,
+                'excused_count': excused,
+                'attendance_percentage': round(percentage, 2)
+            })
         
-        logger.info(f"Attendance report generated for {course.code}")
-        serializer = AttendanceReportSerializer(reports, many=True)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        logger.info(f"Session-based attendance report generated for {course.code}")
+        return Response(report_data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, IsAdminOrTeacher])
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, IsAdminOrTeacher])
     def export(self, request):
-        """Export attendance records as CSV."""
-        course_id = request.data.get('course_id')
+        """Export session-based attendance report as CSV."""
+        course_id = request.data.get('course')
         start_date = request.data.get('start_date')
         end_date = request.data.get('end_date')
         
-        # Build query
-        query = Attendance.objects.all()
+        try:
+            course = Course.objects.get(id=course_id)
+            start = datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None
+            end = datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None
+        except (Course.DoesNotExist, ValueError):
+            return Response(
+                {'error': _('Invalid course or date.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        if course_id:
-            query = query.filter(session__course_id=course_id)
+        # Get all attendance sessions in the date range
+        sessions_query = AttendanceSession.objects.filter(course=course)
         
-        if start_date:
-            query = query.filter(session__date__gte=start_date)
+        if start and end:
+            sessions_query = sessions_query.filter(date__range=[start, end])
+        elif start:
+            sessions_query = sessions_query.filter(date__gte=start)
+        elif end:
+            sessions_query = sessions_query.filter(date__lte=end)
+            
+        sessions = sessions_query.order_by('-date', '-start_time')
         
-        if end_date:
-            query = query.filter(session__date__lte=end_date)
+        # Get total enrolled students
+        total_students = StudentProfile.objects.filter(
+            enrollments__course=course,
+            enrollments__is_active=True
+        ).distinct().count()
         
         # Create CSV
         output = StringIO()
@@ -498,24 +512,41 @@ class AttendanceReportViewSet(viewsets.ReadOnlyModelViewSet):
         
         # Write header
         writer.writerow([
-            'Date', 'Course', 'Student', 'Email', 'Status', 'Time Marked', 'Remarks'
+            'Date', 'Start Time', 'End Time', 'Course Code', 'Course Name',
+            'Total Students', 'Present', 'Leave', 'Absent', 'Excused', 'Attendance %'
         ])
         
         # Write data
-        for record in query:
+        for session in sessions:
+            attendances = Attendance.objects.filter(session=session)
+            
+            present = attendances.filter(status=Attendance.Status.PRESENT).count()
+            leave = attendances.filter(status=Attendance.Status.LEAVE).count()
+            absent = attendances.filter(status=Attendance.Status.ABSENT).count()
+            excused = attendances.filter(status=Attendance.Status.EXCUSED).count()
+            
+            attended = present + leave
+            percentage = (attended / total_students * 100) if total_students > 0 else 0
+            
             writer.writerow([
-                record.session.date,
-                record.session.course.code,
-                record.student.user.get_full_name(),
-                record.student.user.email,
-                record.status,
-                record.created_at.strftime('%H:%M:%S') if record.created_at else '',
-                record.remarks or ''
+                session.date.strftime('%Y-%m-%d'),
+                session.start_time.strftime('%H:%M:%S'),
+                session.end_time.strftime('%H:%M:%S') if session.end_time else '',
+                course.code,
+                course.name,
+                total_students,
+                present,
+                leave,
+                absent,
+                excused,
+                f'{percentage:.2f}%'
             ])
         
         # Return CSV file
+        output.seek(0)
         response = HttpResponse(output.getvalue(), content_type='text/csv')
-        response['Content-Disposition'] = f'attachment; filename="attendance_{datetime.now().strftime("%Y%m%d")}.csv"'
+        filename = f'attendance_report_{course.code}_{datetime.now().strftime("%Y%m%d")}.csv'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
 

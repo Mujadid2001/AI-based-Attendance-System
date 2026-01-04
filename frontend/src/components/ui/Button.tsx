@@ -19,7 +19,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       fullWidth = false,
       disabled,
       className,
-      ...props
+      ...restProps
     },
     ref
   ) => {
@@ -41,7 +41,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     return (
       <motion.button
-        ref={ref as any}
+        ref={ref}
+        type="button"
         whileHover={{ scale: disabled || isLoading ? 1 : 1.02 }}
         whileTap={{ scale: disabled || isLoading ? 1 : 0.98 }}
         className={clsx(
@@ -52,7 +53,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           className
         )}
         disabled={disabled || isLoading}
-        {...(props as any)}
+        {...restProps}
       >
         {isLoading ? (
           <>

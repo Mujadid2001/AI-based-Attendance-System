@@ -169,6 +169,15 @@ export const attendanceService = {
   },
 
   // Reports
+  generateAttendanceReport: async (params: {
+    course: number
+    start_date: string
+    end_date: string
+  }) => {
+    const response = await api.post('/attendance/reports/generate_report/', params)
+    return response.data
+  },
+
   getAttendanceReport: async (params: {
     course?: number
     student?: number
@@ -185,8 +194,7 @@ export const attendanceService = {
     end_date?: string
     format?: 'csv' | 'excel' | 'pdf'
   }): Promise<Blob> => {
-    const response = await api.get('/attendance/reports/export/', {
-      params,
+    const response = await api.post('/attendance/reports/export/', params, {
       responseType: 'blob',
     })
     return response.data

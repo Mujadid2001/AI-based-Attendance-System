@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Card, Button, LoadingSpinner, Input } from '@components/ui';
 import { IoBarChart, IoFilter, IoDownload } from 'react-icons/io5';
 import { attendanceService, courseService } from '@services/index';
-import type { Course, AttendanceRecord } from '@/types';
+import type { Course, AttendanceReport } from '@/types';
 import toast from 'react-hot-toast';
 
 const Reports = () => {
@@ -11,7 +11,7 @@ const Reports = () => {
   const [selectedCourse, setSelectedCourse] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [reportData, setReportData] = useState<AttendanceRecord[]>([]);
+  const [reportData, setReportData] = useState<AttendanceReport[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingCourses, setLoadingCourses] = useState(true);
 
@@ -35,14 +35,26 @@ const Reports = () => {
       toast.error('Please select a course.');
       return;
     }
+    
+    if (!startDate || !endDate) {
+      toast.error('Please select start and end dates.');
+      return;
+    }
+    
     setLoading(true);
     try {
-      const reportRes = await attendanceService.getAttendanceReport({
+      const reportRes = await attendanceService.generateAttendanceReport({
         course: parseInt(selectedCourse, 10),
         start_date: startDate,
         end_date: endDate,
       });
       setReportData(reportRes);
+      
+      if (reportRes.length === 0) {
+        toast.info('No attendance sessions found for the selected period.');
+      } else {
+        toast.success(`Report generated successfully! Found ${reportRes.length} session(s).`);
+      }
     } catch (error) {
       toast.error('Failed to generate report.');
     } finally {
@@ -129,18 +141,38 @@ const Reports = () => {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4">Student</th>
+                <tr className="border-b bg-gray-50">
                   <th className="text-left py-3 px-4">Date</th>
-                  <th className="text-left py-3 px-4">Status</th>
+                  <th className="text-left py-3 px-4">Time</th>
+                  <th className="text-left py-3 px-4">Course</th>
+                  <th className="text-center py-3 px-4">Total Students</th>
+                  <th className="text-center py-3 px-4">Present</th>
+                  <th className="text-center py-3 px-4">Leave</th>
+                  <th className="text-center py-3 px-4">Absent</th>
+                  <th className="text-center py-3 px-4">Excused</th>
+                  <th className="text-center py-3 px-4">Attendance %</th>
                 </tr>
               </thead>
               <tbody>
                 {reportData.map((record) => (
-                  <tr key={record.id} className="border-b">
-                    <td className="py-3 px-4">{record.student.user.first_name} {record.student.user.last_name}</td>
-                    <td className="py-3 px-4">{new Date(record.timestamp).toLocaleDateString()}</td>
-                    <td className="py-3 px-4">{record.status}</td>
+                  <tr key={record.id} className="border-b hover:bg-gray-50">
+                    <td className="py-3 px-4">{new Date(record.date).toLocaleDateString()}</td>
+                    <td className="py-3 px-4">
+                      {record.start_time}
+                      {record.end_time && ` - ${record.end_time}`}
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="font-medium">{record.course_code}</div>
+                      <div className="text-sm text-gray-600">{record.course_name}</div>
+                    </td>
+                    <td className="py-3 px-4 text-center font-medium">{record.total_students}</td>
+                    <td className="py-3 px-4 text-center text-green-600 font-medium">{record.present_count}</td>
+                    <td className="py-3 px-4 text-center text-yellow-600 font-medium">{record.leave_count}</td>
+                    <td className="py-3 px-4 text-center text-red-600 font-medium">{record.absent_count}</td>
+                    <td className="py-3 px-4 text-center text-blue-600 font-medium">{record.excused_count}</td>
+                    <td className="py-3 px-4 text-center font-bold text-lg">
+                      {record.attendance_percentage.toFixed(1)}%
+                    </td>
                   </tr>
                 ))}
               </tbody>
