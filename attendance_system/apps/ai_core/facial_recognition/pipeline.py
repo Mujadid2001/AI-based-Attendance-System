@@ -281,19 +281,40 @@ class FacialRecognitionPipeline:
             
             # Compare against all known encodings using accurate distance metric
             all_ids = self.storage.get_all_ids()
-            known_encodings_list = [self.storage.get_encoding(sid) for sid in all_ids]
+            known_encodings_list = []
+            valid_ids = []
+            
+            # Validate and filter encodings
+            for sid in all_ids:
+                enc = self.storage.get_encoding(sid)
+                if enc is not None and isinstance(enc, np.ndarray) and enc.shape == (128,):
+                    known_encodings_list.append(enc)
+                    valid_ids.append(sid)
+                else:
+                    logger.warning(f"Invalid encoding for student {sid}: type={type(enc)}, shape={enc.shape if hasattr(enc, 'shape') else 'N/A'}")
+            
+            if len(known_encodings_list) == 0:
+                return {
+                    'success': False,
+                    'error': 'No valid encodings to compare against',
+                    'face_detected': True,
+                    'confidence': 0.0
+                }
+            
+            # Convert to numpy array for face_recognition library
+            known_encodings_array = np.array(known_encodings_list)
             
             # Use a stricter tolerance for initial matching (converted from confidence threshold)
             # Lower tolerance = stricter matching for better accuracy
             tolerance = 1 - self.confidence_threshold
             
             matches = face_recognition.compare_faces(
-                known_encodings_list,
+                known_encodings_array,
                 encoding,
                 tolerance=tolerance
             )
             face_distances = face_recognition.face_distance(
-                known_encodings_list,
+                known_encodings_array,
                 encoding
             )
             
@@ -322,7 +343,7 @@ class FacialRecognitionPipeline:
                     logger.warning(f"Ambiguous match: best_distance={best_distance:.3f}, second_best={second_best_distance:.3f}, gap={distance_gap:.3f}")
             
             if matches[best_match_index] and confidence >= self.confidence_threshold:
-                student_id = all_ids[best_match_index]
+                student_id = valid_ids[best_match_index]
                 logger.info(f"✓ Face recognized: student_id={student_id}, confidence={confidence:.3f}, distance={best_distance:.3f}")
                 return {
                     'success': True,
