@@ -473,22 +473,34 @@ class ExternalCameraViewSet(viewsets.ModelViewSet):
         """
         # Check authentication from header or query parameter
         from rest_framework_simplejwt.authentication import JWTAuthentication
+        from django.contrib.auth import get_user_model
+        
         jwt_auth = JWTAuthentication()
+        authenticated = False
         
         # Try to authenticate from header first
         try:
             auth_result = jwt_auth.authenticate(request)
             if auth_result is not None:
                 request.user, request.auth = auth_result
+                authenticated = True
         except Exception:
-            # If header auth fails, try token from query parameter
+            pass
+        
+        # If header auth fails, try token from query parameter
+        if not authenticated:
             token = request.query_params.get('token')
             if token:
                 try:
                     from rest_framework_simplejwt.tokens import AccessToken
                     access_token = AccessToken(token)
-                    # Token is valid, we can proceed
+                    # Token is valid, get user from token
+                    User = get_user_model()
+                    user_id = access_token['user_id']
+                    request.user = User.objects.get(id=user_id)
+                    authenticated = True
                 except Exception as e:
+                    logger.warning(f"Token validation failed: {e}")
                     return Response(
                         {'error': 'Invalid or expired token'},
                         status=status.HTTP_401_UNAUTHORIZED

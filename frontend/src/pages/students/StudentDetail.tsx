@@ -117,15 +117,28 @@ const StudentDetail = () => {
             <p className="text-gray-600">{student.roll_number}</p>
           </div>
           <div className="flex space-x-2">
-            {!student.is_face_registered && (
+            {!student.is_face_registered ? (
               <Link to={`/face-registration`} state={{ 
                 prefilledRollNumber: student.roll_number,
                 studentEmail: student.user.email,
-                studentName: `${student.user.first_name} ${student.user.last_name}`
+                studentName: `${student.user.first_name} ${student.user.last_name}`,
+                isUpdate: false
               }}>
                 <Button variant="secondary">
                   <IoCamera className="w-5 h-5 mr-2" />
                   Register Face
+                </Button>
+              </Link>
+            ) : (
+              <Link to={`/face-registration`} state={{ 
+                prefilledRollNumber: student.roll_number,
+                studentEmail: student.user.email,
+                studentName: `${student.user.first_name} ${student.user.last_name}`,
+                isUpdate: true
+              }}>
+                <Button variant="secondary">
+                  <IoCamera className="w-5 h-5 mr-2" />
+                  Update Face
                 </Button>
               </Link>
             )}
@@ -182,12 +195,23 @@ const StudentDetail = () => {
           {student.is_face_registered ? (
             <>
               <IoCheckmarkCircle className="w-12 h-12 text-green-600" />
-              <div>
+              <div className="flex-grow">
                 <Badge variant="success">Face Registered</Badge>
                 <p className="text-sm text-gray-600 mt-1">
-                  Face data is available for AI attendance.
+                  Face data is available for AI attendance. You can update it if needed.
                 </p>
               </div>
+              <Link to={`/face-registration`} state={{ 
+                prefilledRollNumber: student.roll_number,
+                studentEmail: student.user.email,
+                studentName: `${student.user.first_name} ${student.user.last_name}`,
+                isUpdate: true
+              }}>
+                <Button variant="outline">
+                  <IoCamera className="w-5 h-5 mr-2" />
+                  Update Face
+                </Button>
+              </Link>
             </>
           ) : (
             <>

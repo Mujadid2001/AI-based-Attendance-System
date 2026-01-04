@@ -23,6 +23,8 @@ const FaceRecognition = () => {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const websocketRef = useRef<WebSocket | null>(null)
   const [useWebSocket, setUseWebSocket] = useState(true) // Prefer WebSocket over polling
+  const lastErrorMessageRef = useRef<string>('')
+  const lastErrorTimeRef = useRef<number>(0)
 
   useEffect(() => {
     loadMobileCameras()
@@ -86,11 +88,21 @@ const FaceRecognition = () => {
           
           setRecognitionResult(transformedResult)
           
-          // Show toast notification on laptop
+          // Show toast notification on laptop (with debounce for errors)
           if (data.success) {
             toast.success(`📱 Mobile: Recognized ${transformedResult.student_name}`)
+            lastErrorMessageRef.current = '' // Reset error tracking on success
           } else {
-            toast.error(`📱 Mobile: ${data.error || 'Face not recognized'}`)
+            // Only show error toast if it's different from last error or 5 seconds have passed
+            const errorMsg = data.error || 'Face not recognized'
+            const now = Date.now()
+            const timeSinceLastError = now - lastErrorTimeRef.current
+            
+            if (lastErrorMessageRef.current !== errorMsg || timeSinceLastError > 5000) {
+              toast.error(`📱 Mobile: ${errorMsg}`)
+              lastErrorMessageRef.current = errorMsg
+              lastErrorTimeRef.current = now
+            }
           }
         } else if (response.status === 200) {
           // Regular frame image
@@ -159,11 +171,21 @@ const FaceRecognition = () => {
           
           setRecognitionResult(transformedResult)
           
-          // Show toast notification on laptop
+          // Show toast notification on laptop (with debounce for errors)
           if (data.success) {
             toast.success(`📱 Mobile: Recognized ${transformedResult.student_name}`)
+            lastErrorMessageRef.current = '' // Reset error tracking on success
           } else {
-            toast.error(`📱 Mobile: ${data.error || 'Face not recognized'}`)
+            // Only show error toast if it's different from last error or 5 seconds have passed
+            const errorMsg = data.error || 'Face not recognized'
+            const now = Date.now()
+            const timeSinceLastError = now - lastErrorTimeRef.current
+            
+            if (lastErrorMessageRef.current !== errorMsg || timeSinceLastError > 5000) {
+              toast.error(`📱 Mobile: ${errorMsg}`)
+              lastErrorMessageRef.current = errorMsg
+              lastErrorTimeRef.current = now
+            }
           }
         }
       } catch (error) {

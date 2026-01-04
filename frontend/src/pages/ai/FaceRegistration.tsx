@@ -15,6 +15,7 @@ const FaceRegistration = () => {
   const prefilledRollNumber = location.state?.prefilledRollNumber || ''
   const studentEmail = location.state?.studentEmail || ''
   const studentName = location.state?.studentName || ''
+  const isUpdate = location.state?.isUpdate || false // New prop to indicate update mode
   
   const webcamRef = useRef<Webcam>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -128,6 +129,7 @@ const FaceRegistration = () => {
     }
 
     setIsProcessing(true)
+    const loadingToast = toast.loading(`Processing ${capturedImages.length} images... This may take a minute.`)
 
     try {
       // Convert base64 images to files
@@ -138,8 +140,14 @@ const FaceRegistration = () => {
         })
       )
 
-      await aiService.registerFace(studentId, files)
-      toast.success('Face registered successfully!')
+      // Use update or register based on mode
+      if (isUpdate) {
+        await aiService.updateFace(studentId, files)
+        toast.success('Face updated successfully!', { id: loadingToast })
+      } else {
+        await aiService.registerFace(studentId, files)
+        toast.success('Face registered successfully!', { id: loadingToast })
+      }
       
       // Reset form
       setStudentId('')
@@ -151,8 +159,15 @@ const FaceRegistration = () => {
       }
     } catch (error: any) {
       console.error('Face registration error:', error)
-      const errorMsg = error.response?.data?.error || error.response?.data?.message || 'Registration failed'
-      toast.error(errorMsg)
+      toast.dismiss(loadingToast)
+      
+      // Check for timeout error
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        toast.error('Request timeout. Please try with fewer images or check your connection.')
+      } else {
+        const errorMsg = error.response?.data?.error || error.response?.data?.message || 'Registration failed'
+        toast.error(errorMsg)
+      }
     } finally {
       setIsProcessing(false)
     }
@@ -163,13 +178,17 @@ const FaceRegistration = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Face Registration</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {isUpdate ? 'Update Face Registration' : 'Face Registration'}
+          </h1>
           {isPrefilledStudent ? (
             <p className="text-gray-600 mt-1">
-              Registering face for: <span className="font-semibold text-gray-900">{studentName}</span> ({studentEmail})
+              {isUpdate ? 'Updating' : 'Registering'} face for: <span className="font-semibold text-gray-900">{studentName}</span> ({studentEmail})
             </p>
           ) : (
-            <p className="text-gray-600 mt-1">Register student faces for attendance recognition</p>
+            <p className="text-gray-600 mt-1">
+              {isUpdate ? 'Update student face for attendance recognition' : 'Register student faces for attendance recognition'}
+            </p>
           )}
         </div>
         {isPrefilledStudent && (
@@ -278,7 +297,7 @@ const FaceRegistration = () => {
               disabled={capturedImages.length < 3 || capturedImages.length > MAX_IMAGES || !studentId}
             >
               <IoCheckmark className="w-5 h-5 mr-2" />
-              Register Face
+              {isUpdate ? 'Update Face' : 'Register Face'}
             </Button>
           </div>
         </Card>
@@ -338,7 +357,7 @@ const FaceRegistration = () => {
           </li>
           <li className="flex items-start gap-2">
             <span className="text-primary-600 font-bold">5.</span>
-            <span>Click "Register Face" when you have captured 3-5 quality images</span>
+            <span>Click "{isUpdate ? 'Update Face' : 'Register Face'}" when you have captured 3-5 quality images</span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-primary-600 font-bold">6.</span>

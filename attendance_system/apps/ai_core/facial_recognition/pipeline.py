@@ -41,13 +41,13 @@ class FacialRecognitionPipeline:
     3. Distance-based matching with ambiguity detection
     """
     
-    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.4, storage=None, enable_quality_checks=True):
+    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.35, storage=None, enable_quality_checks=True):
         """Initialize pipeline with accurate model hierarchy.
         
         Args:
             face_detector: Optional face detector (uses default if None)
             face_recognizer: Optional face recognizer (uses default if None)
-            confidence_threshold: Minimum confidence for recognition (0.4 = 60% match accuracy)
+            confidence_threshold: Minimum confidence for recognition (0.35 = 65% match accuracy, adjusted for low quality webcams)
             storage: Optional training data storage
             enable_quality_checks: Whether to check image quality during registration
         """
@@ -118,17 +118,24 @@ class FacialRecognitionPipeline:
         try:
             rgb_image = self._convert_to_rgb(image)
             
-            # Apply lighting normalization
+            # Apply lighting normalization and enhancement for low quality webcams
             if HAS_CV2 and len(rgb_image.shape) == 3:
+                # Apply bilateral filter to reduce noise while preserving edges
+                rgb_image = cv2.bilateralFilter(rgb_image, 9, 75, 75)
+                
                 # Convert to LAB color space for better lighting handling
                 lab = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2LAB)
                 l, a, b = cv2.split(lab)
-                # Apply CLAHE to L channel
-                clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+                # Apply CLAHE to L channel with more aggressive settings for low quality
+                clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
                 l = clahe.apply(l)
                 # Merge and convert back
                 lab = cv2.merge([l, a, b])
                 rgb_image = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+                
+                # Apply slight sharpening
+                kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+                rgb_image = cv2.filter2D(rgb_image, -1, kernel)
             
             # Try CNN model first (most accurate)
             logger.info("Attempting face detection with CNN model (most accurate)...")
@@ -332,14 +339,14 @@ class FacialRecognitionPipeline:
             confidence = 1 - best_distance
             
             # Additional validation: check if match is significantly better than second-best
-            # This helps prevent false positives
+            # This helps prevent false positives (relaxed for low quality webcams)
             if len(face_distances) > 1:
                 sorted_distances = sorted(enumerate(face_distances), key=lambda x: x[1])
                 second_best_distance = sorted_distances[1][1]
                 distance_gap = second_best_distance - best_distance
                 
-                # Require at least 0.05 gap between best and second-best for confident recognition
-                if distance_gap < 0.05:
+                # Require at least 0.03 gap (relaxed from 0.05 for low quality webcams)
+                if distance_gap < 0.03:
                     logger.warning(f"Ambiguous match: best_distance={best_distance:.3f}, second_best={second_best_distance:.3f}, gap={distance_gap:.3f}")
             
             if matches[best_match_index] and confidence >= self.confidence_threshold:

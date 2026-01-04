@@ -23,6 +23,7 @@ export const aiService = {
 
     const response = await api.post('/ai/face-registration/register-face/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000, // 60 seconds for face processing
     })
 
     // Send remaining images for additional training data
@@ -33,6 +34,48 @@ export const aiService = {
 
       await api.post('/ai/face-registration/register-face/', additionalData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000, // 60 seconds for face processing
+      })
+    }
+
+    return response.data
+  },
+
+  // Update face registration - re-register with new images
+  updateFace: async (rollNumber: string, images: File[]): Promise<void> => {
+    if (images.length === 0) {
+      throw new Error('No images provided')
+    }
+
+    if (images.length < 3) {
+      throw new Error('Minimum 3 images required')
+    }
+
+    if (images.length > 5) {
+      throw new Error('Maximum 5 images allowed')
+    }
+
+    // Send first image with clear_existing flag (clears old data)
+    const formData = new FormData()
+    formData.append('student_id', rollNumber)
+    formData.append('image', images[0])
+    formData.append('clear_existing', 'true')
+
+    const response = await api.post('/ai/face-registration/update-face/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000, // 60 seconds for face processing
+    })
+
+    // Send remaining images for additional training data
+    for (let i = 1; i < images.length; i++) {
+      const additionalData = new FormData()
+      additionalData.append('student_id', rollNumber)
+      additionalData.append('image', images[i])
+      additionalData.append('clear_existing', 'false')
+
+      await api.post('/ai/face-registration/update-face/', additionalData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000, // 60 seconds for face processing
       })
     }
 

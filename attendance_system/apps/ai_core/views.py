@@ -60,6 +60,13 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
                 )
             # student_id is actually the roll_number from frontend
             student = StudentProfile.objects.get(roll_number=student_id)
+            
+            # Check if face is already registered
+            if student.is_face_registered:
+                return Response(
+                    {'error': _('Face already registered. Use update-face endpoint to update.')},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
                 
             # Check maximum images limit (5 images)
             from apps.student.models import StudentFaceImage
@@ -85,6 +92,91 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
                 {
                     'message': result['message'],
                     'images_count': StudentFaceImage.objects.filter(student=student).count()
+                },
+                status=status.HTTP_200_OK
+            )
+        else:
+            return Response(
+                {'error': result['message']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=False, methods=['post'], url_path='update-face')
+    def update_face(self, request):
+        """
+        Update/re-register student face.
+        Only admin/teacher can update faces.
+        This will delete old face data and allow new registration.
+        Accepts one image at a time. Call multiple times for multiple images (max 5).
+        """
+        image_file = request.FILES.get('image')
+        student_id = request.data.get('student_id')
+        clear_existing = request.data.get('clear_existing', 'false').lower() == 'true'
+        
+        if not image_file:
+            return Response(
+                {'error': _('Image file is required.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate image file size (max 7MB)
+        if image_file.size > 7 * 1024 * 1024:
+            return Response(
+                {'error': _('Image file size must be less than 7MB.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            if not student_id:
+                return Response(
+                    {'error': _('student_id (roll number) is required.')},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # student_id is actually the roll_number from frontend
+            student = StudentProfile.objects.get(roll_number=student_id)
+            
+            from apps.student.models import StudentFaceImage
+            from django.utils import timezone
+            
+            # Only clear if explicitly requested
+            if clear_existing:
+                existing_images = StudentFaceImage.objects.filter(student=student)
+                # Delete all old face images
+                existing_images.delete()
+                
+                # Reset face registration status
+                student.is_face_registered = False
+                student.face_embedding = None
+                student.face_encoding_updated_at = None
+                student.save()
+                
+                logger.info(f"Cleared existing face data for student: {student.roll_number}")
+            else:
+                # Check maximum images limit (5 images)
+                existing_images_count = StudentFaceImage.objects.filter(student=student).count()
+                if existing_images_count >= 5:
+                    return Response(
+                        {'error': _('Maximum 5 face images allowed. Set clear_existing=true to start fresh.')},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+        except StudentProfile.DoesNotExist:
+            return Response(
+                {'error': _('Student not found. Please check the roll number.')},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Register/update face
+        ai_manager = get_ai_manager()
+        result = ai_manager.register_student_face(image_file, student)
+        
+        if result['success']:
+            return Response(
+                {
+                    'message': result['message'],
+                    'images_count': StudentFaceImage.objects.filter(student=student).count(),
+                    'is_update': True
                 },
                 status=status.HTTP_200_OK
             )
