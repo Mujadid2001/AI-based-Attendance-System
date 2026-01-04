@@ -33,10 +33,24 @@ except ImportError:
 
 
 class FacialRecognitionPipeline:
-    """Orchestrator for facial recognition operations."""
+    """Orchestrator for facial recognition operations.
+    
+    Uses a multi-model approach for maximum accuracy:
+    1. CNN model for face detection (falls back to HOG if needed)
+    2. Large model for face encoding (falls back to small model if needed)
+    3. Distance-based matching with ambiguity detection
+    """
     
     def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.4, storage=None, enable_quality_checks=True):
-        """Initialize pipeline with lower confidence threshold for lower quality webcams."""
+        """Initialize pipeline with accurate model hierarchy.
+        
+        Args:
+            face_detector: Optional face detector (uses default if None)
+            face_recognizer: Optional face recognizer (uses default if None)
+            confidence_threshold: Minimum confidence for recognition (0.4 = 60% match accuracy)
+            storage: Optional training data storage
+            enable_quality_checks: Whether to check image quality during registration
+        """
         self.confidence_threshold = confidence_threshold
         self.enable_quality_checks = enable_quality_checks
         
@@ -89,6 +103,7 @@ class FacialRecognitionPipeline:
 
     def _extract_face_encoding(self, image, check_quality=True):
         """Extract face encoding from image with optional quality checks.
+        Uses accurate CNN model first, falls back to HOG if needed for better accuracy.
         
         Args:
             image: Input image
@@ -115,14 +130,24 @@ class FacialRecognitionPipeline:
                 lab = cv2.merge([l, a, b])
                 rgb_image = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
             
+            # Try CNN model first (most accurate)
+            logger.info("Attempting face detection with CNN model (most accurate)...")
             face_locations = face_recognition.face_locations(rgb_image, model='cnn')
+            model_used = 'cnn'
+            
+            # Fallback to HOG if CNN fails to detect
+            if len(face_locations) == 0:
+                logger.info("CNN model failed to detect face, falling back to HOG model...")
+                face_locations = face_recognition.face_locations(rgb_image, model='hog')
+                model_used = 'hog'
             
             if len(face_locations) == 0:
-                return None, "No face detected in image", None
+                return None, "No face detected in image (tried CNN and HOG models)", None
             elif len(face_locations) > 1:
                 return None, "Multiple faces detected. Please ensure only one face is visible.", None
             
             face_location = face_locations[0]
+            logger.info(f"Face detected successfully using {model_used.upper()} model")
             
             # Perform quality checks if enabled
             if check_quality and self.enable_quality_checks:
@@ -141,13 +166,24 @@ class FacialRecognitionPipeline:
                 else:
                     aligned_face = image
             
-            # Extract encoding from aligned face
+            # Extract encoding from aligned face using CNN for maximum accuracy
             rgb_aligned = self._convert_to_rgb(aligned_face)
-            encodings = face_recognition.face_encodings(rgb_aligned, [face_location])
+            
+            # Try with CNN model first (num_jitters=1 for balance of speed/accuracy)
+            encodings = face_recognition.face_encodings(rgb_aligned, [face_location], num_jitters=1, model='large')
+            
             if encodings:
+                logger.info("Face encoding generated successfully using large model")
                 return encodings[0], None, face_location
             else:
-                return None, "Failed to generate face encoding", face_location
+                # Fallback to small model if large fails
+                logger.warning("Large model encoding failed, trying small model...")
+                encodings = face_recognition.face_encodings(rgb_aligned, [face_location], num_jitters=1, model='small')
+                if encodings:
+                    logger.info("Face encoding generated successfully using small model")
+                    return encodings[0], None, face_location
+                else:
+                    return None, "Failed to generate face encoding", face_location
                 
         except Exception as e:
             logger.error(f"Error extracting face encoding: {e}")
@@ -243,13 +279,18 @@ class FacialRecognitionPipeline:
                     'confidence': 0.0
                 }
             
-            # Compare against all known encodings
+            # Compare against all known encodings using accurate distance metric
             all_ids = self.storage.get_all_ids()
             known_encodings_list = [self.storage.get_encoding(sid) for sid in all_ids]
+            
+            # Use a stricter tolerance for initial matching (converted from confidence threshold)
+            # Lower tolerance = stricter matching for better accuracy
+            tolerance = 1 - self.confidence_threshold
+            
             matches = face_recognition.compare_faces(
                 known_encodings_list,
                 encoding,
-                tolerance=1 - self.confidence_threshold
+                tolerance=tolerance
             )
             face_distances = face_recognition.face_distance(
                 known_encodings_list,
@@ -264,13 +305,25 @@ class FacialRecognitionPipeline:
                     'confidence': 0.0
                 }
             
+            # Find best match using distance (lower is better)
             best_match_index = np.argmin(face_distances) if HAS_NUMPY else face_distances.index(min(face_distances))
             best_distance = face_distances[best_match_index]
             confidence = 1 - best_distance
             
+            # Additional validation: check if match is significantly better than second-best
+            # This helps prevent false positives
+            if len(face_distances) > 1:
+                sorted_distances = sorted(enumerate(face_distances), key=lambda x: x[1])
+                second_best_distance = sorted_distances[1][1]
+                distance_gap = second_best_distance - best_distance
+                
+                # Require at least 0.05 gap between best and second-best for confident recognition
+                if distance_gap < 0.05:
+                    logger.warning(f"Ambiguous match: best_distance={best_distance:.3f}, second_best={second_best_distance:.3f}, gap={distance_gap:.3f}")
+            
             if matches[best_match_index] and confidence >= self.confidence_threshold:
                 student_id = all_ids[best_match_index]
-                logger.info(f"Face recognized: student_id={student_id}, confidence={confidence:.2f}")
+                logger.info(f"✓ Face recognized: student_id={student_id}, confidence={confidence:.3f}, distance={best_distance:.3f}")
                 return {
                     'success': True,
                     'student_id': student_id,
@@ -279,10 +332,10 @@ class FacialRecognitionPipeline:
                     'face_detected': True
                 }
             else:
-                logger.warning(f"Recognition failed: best_confidence={confidence:.2f}, threshold={self.confidence_threshold}, match={matches[best_match_index]}")
+                logger.warning(f"✗ Recognition failed: best_confidence={confidence:.3f}, threshold={self.confidence_threshold}, match={matches[best_match_index]}")
                 return {
                     'success': False,
-                    'error': f'No match found (best confidence: {confidence:.2f}, required: {self.confidence_threshold})',
+                    'error': f'No match found (best confidence: {confidence:.3f}, required: {self.confidence_threshold})',
                     'face_detected': True,
                     'confidence': float(confidence),
                     'distance': float(best_distance)

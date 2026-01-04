@@ -1,5 +1,12 @@
 """
 API views for facial recognition and AI operations.
+
+Face Recognition Accuracy Pipeline:
+- Uses CNN model for detection (most accurate), falls back to HOG if needed
+- Uses large model for encoding, falls back to small model if needed  
+- Applies lighting normalization and face alignment for better accuracy
+- Compares with distance metrics and ambiguity detection
+- Requires 0.4 confidence threshold (60% match accuracy) by default
 """
 import logging
 from rest_framework import viewsets, status

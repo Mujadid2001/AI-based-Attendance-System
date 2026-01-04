@@ -17,23 +17,12 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Check if ports are available
-echo -e "${YELLOW}Checking ports...${NC}"
+# Kill any processes on ports 3000, 3001, 3002 to ensure system runs on 3000
+echo -e "${YELLOW}Killing processes on ports 3000, 3001, 3002...${NC}"
+npx kill-port 3000,3001,3002
+sleep 1
 
-# Kill any processes on ports 8000 and 3000
-if lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${YELLOW}[WARNING] Port 8000 is in use. Attempting to kill...${NC}"
-    npx kill-port 8000
-    sleep 1
-fi
-
-if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${YELLOW}[WARNING] Port 3000 is in use. Attempting to kill...${NC}"
-    npx kill-port 3000
-    sleep 1
-fi
-
-echo -e "${GREEN}[OK] Ports 8000 and 3000 are available${NC}"
+echo -e "${GREEN}[OK] Ports cleared${NC}"
 echo ""
 
 # Function to cleanup on exit
