@@ -13,11 +13,13 @@ jobs:
     strategy:
       max-parallel: 4
       matrix:
-        python-version: [3.12.4, 3.11.6, 3.10.11]
+        python-version: [3.12.4, 3.11.6]
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
+    - uses: actions/checkout@v4    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential libboost-all-dev libopenblas-dev liblapack-dev libx11-dev libgtk-3-dev    - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
