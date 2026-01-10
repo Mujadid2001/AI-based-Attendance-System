@@ -30,7 +30,7 @@ class TestCVFaceDetector(unittest.TestCase):
         faces = self.detector.detect_faces(test_image)
         
         self.assertEqual(len(faces), 1)
-        self.assertEqual(faces[0], (100, 100, 150, 150))
+        self.assertEqual(tuple(faces[0]), (100, 100, 150, 150))
 
 
 class TestDNNFaceDetector(unittest.TestCase):

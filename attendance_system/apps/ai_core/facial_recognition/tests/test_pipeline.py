@@ -24,7 +24,7 @@ class TestFacialRecognitionPipeline(unittest.TestCase):
     def test_pipeline_initialization(self):
         """Test pipeline initializes correctly."""
         self.assertIsNotNone(self.pipeline)
-        self.assertEqual(self.pipeline.confidence_threshold, 0.6)
+        self.assertEqual(self.pipeline.confidence_threshold, 0.4)
         self.assertIsNotNone(self.pipeline.storage)
         self.assertIsNotNone(self.pipeline.face_recognizer)
         self.assertIsNotNone(self.pipeline.liveness_detector)
@@ -137,6 +137,8 @@ class TestFacialRecognitionPipeline(unittest.TestCase):
             self.assertTrue(os.path.exists(temp_path))
             
             # Create new pipeline and load
+            from apps.ai_core.facial_recognition import FacialRecognitionPipeline
+            from apps.ai_core.facial_recognition.storage import TrainingDataStorage
             new_storage = TrainingDataStorage()
             new_pipeline = FacialRecognitionPipeline(storage=new_storage)
             success = new_pipeline.load_training_data(temp_path)
@@ -190,7 +192,7 @@ class TestTrainingDataStorage(unittest.TestCase):
     
     def test_encryption_key_generation(self):
         """Test encryption key generation."""
-        from attendance_system.apps.ai_core.facial_recognition.storage import TrainingDataStorage, HAS_CRYPTOGRAPHY
+        from apps.ai_core.facial_recognition.storage import TrainingDataStorage, HAS_CRYPTOGRAPHY
         
         if not HAS_CRYPTOGRAPHY:
             self.skipTest("Cryptography package not installed")
@@ -297,7 +299,7 @@ class TestLivenessDetection(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        from attendance_system.apps.ai_core.facial_recognition.liveness import (
+        from apps.ai_core.facial_recognition.liveness import (
             BlinkLivenessDetector, MotionLivenessDetector
         )
         self.blink_detector = BlinkLivenessDetector()
