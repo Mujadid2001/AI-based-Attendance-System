@@ -15,7 +15,7 @@ class ExternalCameraSourceTestCase(TestCase):
     def setUp(self):
         """Set up test data."""
         self.teacher = User.objects.create_user(
-            username='teacher1',
+
             email='teacher1@test.com',
             password='testpass123',
             role='teacher'
@@ -67,7 +67,6 @@ class CameraStreamSessionTestCase(TestCase):
     def setUp(self):
         """Set up test data."""
         self.teacher = User.objects.create_user(
-            username='teacher2',
             email='teacher2@test.com',
             password='testpass123',
             role='teacher'
@@ -118,7 +117,6 @@ class CameraIntegrationAPITestCase(TestCase):
     def setUp(self):
         """Set up test client and user."""
         self.teacher = User.objects.create_user(
-            username='apiteacher',
             email='apiteacher@test.com',
             password='testpass123',
             role='teacher'

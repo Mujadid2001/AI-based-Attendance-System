@@ -9,7 +9,7 @@ class TestCVFaceDetector(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        from attendance_system.apps.ai_core.facial_recognition.detectors import CVFaceDetector, HAS_CV2
+        from apps.ai_core.facial_recognition.detectors import CVFaceDetector, HAS_CV2
         
         if not HAS_CV2:
             self.skipTest("OpenCV not installed")
@@ -38,7 +38,7 @@ class TestDNNFaceDetector(unittest.TestCase):
     
     def test_detector_initialization(self):
         """Test DNN detector initialization."""
-        from attendance_system.apps.ai_core.facial_recognition.detectors import DNNFaceDetector, HAS_CV2
+        from apps.ai_core.facial_recognition.detectors import DNNFaceDetector, HAS_CV2
         
         if not HAS_CV2:
             self.skipTest("OpenCV not installed")
@@ -48,7 +48,7 @@ class TestDNNFaceDetector(unittest.TestCase):
     
     def test_detector_with_missing_models(self):
         """Test DNN detector handles missing model files gracefully."""
-        from attendance_system.apps.ai_core.facial_recognition.detectors import DNNFaceDetector, HAS_CV2
+        from apps.ai_core.facial_recognition.detectors import DNNFaceDetector, HAS_CV2
         
         if not HAS_CV2:
             self.skipTest("OpenCV not installed")
@@ -72,7 +72,7 @@ class TestMTCNNFaceDetector(unittest.TestCase):
     
     def test_detector_initialization_no_mtcnn(self):
         """Test MTCNN detector handles missing package."""
-        from attendance_system.apps.ai_core.facial_recognition.detectors import MTCNNFaceDetector
+        from apps.ai_core.facial_recognition.detectors import MTCNNFaceDetector
         
         detector = MTCNNFaceDetector()
         self.assertIsNotNone(detector)
@@ -88,7 +88,7 @@ class TestDlibFaceDetector(unittest.TestCase):
     
     def test_detector_initialization_no_dlib(self):
         """Test Dlib detector handles missing package."""
-        from attendance_system.apps.ai_core.facial_recognition.detectors import DlibFaceDetector
+        from apps.ai_core.facial_recognition.detectors import DlibFaceDetector
         
         detector = DlibFaceDetector()
         self.assertIsNotNone(detector)

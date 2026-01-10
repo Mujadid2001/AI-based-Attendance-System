@@ -9,7 +9,7 @@ class TestFaceAligner(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        from attendance_system.apps.ai_core.facial_recognition.alignment import FaceAligner
+        from apps.ai_core.facial_recognition.alignment import FaceAligner
         self.aligner = FaceAligner()
     
     def test_aligner_initialization(self):
@@ -32,7 +32,7 @@ class TestSimpleFaceAligner(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        from attendance_system.apps.ai_core.facial_recognition.alignment import SimpleFaceAligner, HAS_OPENCV
+        from apps.ai_core.facial_recognition.alignment import SimpleFaceAligner, HAS_OPENCV
         
         if not HAS_OPENCV:
             self.skipTest("OpenCV not installed")

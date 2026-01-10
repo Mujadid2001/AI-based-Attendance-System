@@ -11,8 +11,8 @@ class TestFacialRecognitionPipeline(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        from attendance_system.apps.ai_core.facial_recognition import FacialRecognitionPipeline
-        from attendance_system.apps.ai_core.facial_recognition.storage import TrainingDataStorage
+        from apps.ai_core.facial_recognition import FacialRecognitionPipeline
+        from apps.ai_core.facial_recognition.storage import TrainingDataStorage
         
         self.storage = TrainingDataStorage()
         self.pipeline = FacialRecognitionPipeline(
@@ -155,7 +155,7 @@ class TestTrainingDataStorage(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        from attendance_system.apps.ai_core.facial_recognition.storage import TrainingDataStorage
+        from apps.ai_core.facial_recognition.storage import TrainingDataStorage
         self.storage = TrainingDataStorage()
     
     def test_add_encoding(self):
@@ -207,7 +207,7 @@ class TestFaceQualityChecker(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures."""
-        from attendance_system.apps.ai_core.facial_recognition.utils import FaceQualityChecker
+        from apps.ai_core.facial_recognition.utils import FaceQualityChecker
         self.checker = FaceQualityChecker()
     
     def test_check_blur_sharp_image(self):
