@@ -14,7 +14,26 @@ jobs:
       max-parallel: 4
       matrix:
         python-version: [3.12.4, 3.11.6]
-
+        
+    env:
+      SECRET_KEY: test-secret-key-for-ci
+      DEBUG: 'True'
+      DB_ENGINE: django.db.backends.sqlite3
+      DB_NAME: db.sqlite3
+      DB_USER: ''
+      DB_PASSWORD: ''
+      DB_HOST: ''
+      DB_PORT: ''
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: '6379'
+      EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+      EMAIL_HOST: ''
+      EMAIL_PORT: '587'
+      EMAIL_USE_TLS: 'True'
+      EMAIL_HOST_USER: ''
+      EMAIL_HOST_PASSWORD: ''
+      DEFAULT_FROM_EMAIL: noreply@test.com
+      
     steps:
     - uses: actions/checkout@v4    
     - name: Install system dependencies
