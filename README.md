@@ -44,9 +44,9 @@ chmod +x setup.sh start.sh
 ```
 
 **Access:**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000/api
-- Admin Panel: http://localhost:8000/admin
+- Frontend: https://localhost:3000
+- Backend API: https://localhost:8000/api
+- Admin Panel: https://localhost:8000/admin
 
 **Note:** Development uses SQLite and console email. Configure `.env.development` if needed.
 
@@ -63,7 +63,7 @@ The system supports WebSocket-based real-time video streaming from mobile camera
   - Caches frames (30s TTL)
   - Broadcasts frames to WebSocket channel group using Django Channels + Redis
 - **Laptop Browser**: 
-  - Connects via WebSocket to `ws://server:8000/ws/camera/{camera_id}/`
+  - Connects via WebSocket to `wss://server:8000/ws/camera/{camera_id}/`
   - Receives frames in real-time
   - Automatically falls back to HTTP polling if WebSocket fails
 
@@ -195,7 +195,7 @@ SERVER_BASE_URL=
 FORCE_DYNAMIC_IP_DETECTION=True
 
 # System will auto-detect your LAN IP (e.g., 192.168.1.100)
-# QR codes will contain: http://192.168.1.100:8000/camera.html
+# QR codes will contain: https://192.168.1.100:8000/camera.html
 ```
 
 ### Production (Fixed Domain)
@@ -208,7 +208,7 @@ FORCE_DYNAMIC_IP_DETECTION=False
 ### Docker Deployment
 ```bash
 # Use host machine's LAN IP
-SERVER_BASE_URL=http://192.168.1.100:8000
+SERVER_BASE_URL=https://192.168.1.100:8000
 # OR use host network mode in docker-compose.yml
 ```
 
@@ -257,14 +257,14 @@ The system automatically detects WSL and uses Windows host's LAN IP. However, WS
    ```
 
 6. **Access from mobile device:**
-   - Use the Windows IP address (e.g., http://192.168.1.100:8000)
+   - Use the Windows IP address (e.g., https://192.168.1.100:8000)
    - Scan QR code which will contain the Windows IP
 
 #### Verifying WSL Configuration
 
 ```bash
 # Check detected IP (DEBUG mode only)
-curl http://localhost:8000/api/camera/sources/network-info/
+curl -k https://localhost:8000/api/camera/sources/network-info/
 ```
 
 #### Managing WSL Port Forwarding
@@ -288,12 +288,12 @@ Remove-NetFirewallRule -DisplayName "WSL Django Server"
 
 - **Port forwarding is lost after Windows restart**: Re-run the port forwarding command
 - **Mobile can't connect**: Verify Windows Firewall rule is active
-- **Auto-detection fails**: Manually set `SERVER_BASE_URL=http://YOUR_WINDOWS_IP:8000` in `.env.development`
+- **Auto-detection fails**: Manually set `SERVER_BASE_URL=https://YOUR_WINDOWS_IP:8000` in `.env.development`
 - **Wrong IP detected**: Set `SERVER_BASE_URL` manually in `.env.development`
 
 ### General Network Troubleshooting
 
-- **Check detected IP**: Visit `http://localhost:8000/api/camera/sources/network-info/` (DEBUG mode only)
+- **Check detected IP**: Visit `https://localhost:8000/api/camera/sources/network-info/` (DEBUG mode only)
 - **WSL users**: Server binds to `0.0.0.0:8000` but mobile must use Windows host IP
 - **VPN interference**: If VPN is active, manually set `SERVER_BASE_URL`
 - **Multiple network adapters**: System prioritizes private IP ranges (192.168.x.x, 10.x.x.x)
@@ -423,7 +423,7 @@ AI-based-Attendance-System/
 7. Go to **Face Recognition** page and select mobile camera as source
 
 ### For Admins
-1. Access **admin panel**: http://localhost:8000/admin
+1. Access **admin panel**: https://localhost:8000/admin
 2. Manage users, courses, attendance records
 3. Configure system settings
 4. Load training data for face recognition
@@ -465,7 +465,7 @@ AI-based-Attendance-System/
 - `POST /api/camera/sources/upload-frame/` - Upload frame from mobile
 - `WS /ws/camera/{camera_id}/` - WebSocket for real-time streaming
 
-**Full API documentation:** http://localhost:8000/api/
+**Full API documentation:** https://localhost:8000/api/
 
 ---
 
@@ -506,7 +506,7 @@ python manage.py migrate --run-syncdb
 ### Face Recognition Not Working
 ```bash
 # Check if training data is loaded
-curl http://localhost:8000/api/ai/configuration/load-training-data/ -X POST
+curl https://localhost:8000/api/ai/configuration/load-training-data/ -X POST -k
 
 # Check if students have registered faces
 # Admin panel → Student Face Images

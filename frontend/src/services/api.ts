@@ -3,7 +3,7 @@ import toast from 'react-hot-toast'
 
 // Backend API base URL - configured via environment variable
 // This allows complete decoupling from backend
-const BASE_URL = (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000/api'
+const BASE_URL = (import.meta.env.VITE_API_URL as string) || 'https://localhost:8000/api'
 const API_TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT as string) || 30000
 
 // Validate API URL on initialization

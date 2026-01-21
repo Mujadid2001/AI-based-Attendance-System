@@ -53,7 +53,7 @@ python manage.py runserver 0.0.0.0:8000 &
 BACKEND_PID=$!
 cd ..
 
-echo -e "${GREEN}[OK] Backend starting on http://localhost:8000${NC}"
+echo -e "${GREEN}[OK] Backend starting on https://localhost:8000${NC}"
 sleep 3
 
 # Start Frontend
@@ -63,7 +63,7 @@ npm run dev -- --host 0.0.0.0 &
 FRONTEND_PID=$!
 cd ..
 
-echo -e "${GREEN}[OK] Frontend starting on http://localhost:3000${NC}"
+echo -e "${GREEN}[OK] Frontend starting on https://localhost:3000${NC}"
 echo ""
 
 echo "========================================"
@@ -71,9 +71,9 @@ echo -e "${GREEN}[OK] Both services are running!${NC}"
 echo "========================================"
 echo ""
 echo -e "${CYAN}Access the application:${NC}"
-echo "  Frontend:     http://localhost:3000"
-echo "  Backend API:  http://localhost:8000/api"
-echo "  Admin Panel:  http://localhost:8000/admin"
+echo "  Frontend:     https://localhost:3000"
+echo "  Backend API:  https://localhost:8000/api"
+echo "  Admin Panel:  https://localhost:8000/admin"
 echo ""
 echo -e "${YELLOW}Press Ctrl+C to stop both services${NC}"
 echo ""

@@ -6,7 +6,7 @@
 export const securityConfig = {
   // API Configuration
   api: {
-    baseUrl: (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000/api',
+    baseUrl: (import.meta.env.VITE_API_URL as string) || 'https://localhost:8000/api',
     timeout: 30000,
     withCredentials: true,
   },
@@ -50,7 +50,7 @@ export const securityConfig = {
     scriptSrc: ["'self'", "'unsafe-inline'"],
     styleSrc: ["'self'", "'unsafe-inline'"],
     imgSrc: ["'self'", 'data:', 'https:'],
-    connectSrc: ["'self'", (import.meta.env.VITE_API_URL as string) || 'http://localhost:8000'],
+    connectSrc: ["'self'", (import.meta.env.VITE_API_URL as string) || 'https://localhost:8000'],
   },
 }
 

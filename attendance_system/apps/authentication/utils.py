@@ -13,6 +13,6 @@ def get_frontend_url():
     frontend_url = getattr(settings, 'FRONTEND_URL', None)
     if not frontend_url:
         from decouple import config
-        frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
+        frontend_url = config('FRONTEND_URL', default='https://localhost:3000')
     return frontend_url.rstrip('/')
 

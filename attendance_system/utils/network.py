@@ -206,7 +206,7 @@ def get_server_base_url(request=None, force_detect: bool = False) -> str:
         force_detect: Force dynamic IP detection regardless of settings
     
     Returns:
-        str: Full base URL (e.g., 'http://192.168.1.100:8000')
+        str: Full base URL (e.g., 'https://192.168.1.100:8000')
     """
     # Priority 1: Environment variable (production override)
     env_base_url = getattr(settings, 'SERVER_BASE_URL', None)
@@ -222,7 +222,7 @@ def get_server_base_url(request=None, force_detect: bool = False) -> str:
             port = getattr(settings, 'SERVER_PORT', '8000')
             
             # Determine scheme
-            scheme = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'http'
+            scheme = 'https' if getattr(settings, 'SECURE_SSL_REDIRECT', False) else 'https'
             
             base_url = f"{scheme}://{local_ip}:{port}"
             logger.info(f"Using dynamically detected base URL: {base_url}")
@@ -238,7 +238,7 @@ def get_server_base_url(request=None, force_detect: bool = False) -> str:
             logger.warning(f"Request-based URL detection failed: {e}")
     
     # Priority 4: Fallback
-    fallback = 'http://localhost:8000'
+    fallback = 'https://localhost:8000'
     logger.warning(f"All detection methods failed - using fallback: {fallback}")
     return fallback
 
