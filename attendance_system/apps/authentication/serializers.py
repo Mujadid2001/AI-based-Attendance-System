@@ -8,7 +8,7 @@ from apps.authentication.models import LoginLog, EmailVerificationToken
 
 User = get_user_model()
 
-
+# ModelSerializers
 class UserRegistrationSerializer(serializers.ModelSerializer):
     """Serializer for user registration."""
     
@@ -71,36 +71,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return user
         
 
-
-class UserLoginSerializer(serializers.Serializer):
-    """Serializer for user login."""
-    
-    email = serializers.EmailField()
-    password = serializers.CharField(style={'input_type': 'password'})
-    
-    def validate(self, data):
-        """Authenticate user."""
-        email = data.get('email')
-        password = data.get('password')
-        
-        if email and password:
-            user = authenticate(
-                username=email,
-                password=password
-            )
-            if not user:
-                raise serializers.ValidationError(
-                    _("Invalid email or password.")
-                )
-            data['user'] = user
-        else:
-            raise serializers.ValidationError(
-                _("Email and password are required.")
-            )
-        
-        return data
-
-
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for user details."""
     
@@ -141,6 +111,54 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         ]
 
 
+
+class LoginLogSerializer(serializers.ModelSerializer):
+    """Serializer for login logs."""
+    
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    
+    class Meta:
+        model = LoginLog
+        fields = [
+            'id', 'user', 'user_email', 'ip_address', 'success',
+            'failure_reason', 'timestamp'
+        ]
+        read_only_fields = fields
+
+
+# Simple Serializers
+class UserLoginSerializer(serializers.Serializer):
+    """Serializer for user login."""
+    
+    email = serializers.EmailField()
+    password = serializers.CharField(style={'input_type': 'password'})
+    
+    def validate(self, data):
+        """Authenticate user."""
+        email = data.get('email')
+        password = data.get('password')
+        
+        if email and password:
+            user = authenticate(
+                username=email,
+                password=password
+            )
+            if not user:
+                raise serializers.ValidationError(
+                    _("Invalid email or password.")
+                )
+            data['user'] = user
+        else:
+            raise serializers.ValidationError(
+                _("Email and password are required.")
+            )
+        
+        return data
+
+
+
+
+
 class ChangePasswordSerializer(serializers.Serializer):
     """Serializer for password change."""
     
@@ -163,21 +181,6 @@ class ChangePasswordSerializer(serializers.Serializer):
                 _("New passwords don't match.")
             )
         return data
-
-
-class LoginLogSerializer(serializers.ModelSerializer):
-    """Serializer for login logs."""
-    
-    user_email = serializers.CharField(source='user.email', read_only=True)
-    
-    class Meta:
-        model = LoginLog
-        fields = [
-            'id', 'user', 'user_email', 'ip_address', 'success',
-            'failure_reason', 'timestamp'
-        ]
-        read_only_fields = fields
-
 
 class EmailVerificationSerializer(serializers.Serializer):
     """Serializer for email verification."""

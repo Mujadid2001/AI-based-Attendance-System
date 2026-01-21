@@ -4,21 +4,14 @@ Email utilities for sending verification and notification emails.
 import logging
 from django.core.mail import send_mail
 from django.conf import settings
-from django.template.loader import render_to_string
-from django.utils.html import strip_tags
+from apps.authentication.utils import get_frontend_url
+
 
 logger = logging.getLogger(__name__)
 
-
-def get_frontend_url():
-    """Get frontend base URL from settings or environment."""
-    # Try to get from settings first, fallback to environment variable
-    frontend_url = getattr(settings, 'FRONTEND_URL', None)
-    if not frontend_url:
-        from decouple import config
-        frontend_url = config('FRONTEND_URL', default='http://localhost:3000')
-    return frontend_url.rstrip('/')
-
+SYSTEM_NAME = "AI Attendance System"
+YEAR = "2025"
+SYSTEM_ICON = "🎓"
 
 def send_verification_email(user, token):
     """
@@ -32,7 +25,7 @@ def send_verification_email(user, token):
         bool: True if email sent successfully, False otherwise
     """
     try:
-        subject = 'Verify Your Email - AI Attendance System'
+        subject = f'Verify Your Email - {SYSTEM_NAME}'
         
         # Verification token to be used by frontend
         verification_token = str(token.token)
@@ -80,11 +73,11 @@ def send_verification_email(user, token):
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>Welcome to AI Attendance System!</h1>
+                    <h1>Welcome to {SYSTEM_NAME}!</h1>
                 </div>
                 <div class="content">
                     <h2>Hello {user.get_full_name() or user.email},</h2>
-                    <p>Thank you for registering with AI Attendance System. Please verify your email address to complete your registration and access the system.</p>
+                    <p>Thank you for registering with {SYSTEM_NAME}. Please verify your email address to complete your registration and access the system.</p>
                     
                     <div style="text-align: center;">
                         <a href="{verification_link}" class="button">Verify Email Address</a>
@@ -104,7 +97,7 @@ def send_verification_email(user, token):
                     <p>If you didn't create an account, please ignore this email and your account will not be activated.</p>
                 </div>
                 <div class="footer">
-                    <p>&copy; 2025 AI Attendance System. All rights reserved.</p>
+                    <p>&copy; {YEAR} {SYSTEM_NAME}. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -115,7 +108,7 @@ def send_verification_email(user, token):
         plain_message = f"""
 Hello {user.get_full_name() or user.email},
 
-Thank you for registering with AI Attendance System. Please verify your email address to complete your registration.
+Thank you for registering with {SYSTEM_NAME}. Please verify your email address to complete your registration.
 
 Click the link below to verify your email:
 {verification_link}
@@ -127,7 +120,7 @@ This link will expire in 48 hours.
 
 If you didn't create an account, please ignore this email.
 
-© 2025 AI Attendance System. All rights reserved.
+© {YEAR} {SYSTEM_NAME}. All rights reserved.
         """
         
         # Send email
@@ -159,7 +152,7 @@ def send_verification_success_email(user):
         bool: True if email sent successfully, False otherwise
     """
     try:
-        subject = 'Email Verified Successfully - AI Attendance System'
+        subject = f'Email Verified Successfully - {SYSTEM_NAME}'
         
         html_message = f"""
         <!DOCTYPE html>
@@ -181,11 +174,11 @@ def send_verification_success_email(user):
                 <div class="content">
                     <h2>Hello {user.get_full_name()},</h2>
                     <p>Your email address has been successfully verified!</p>
-                    <p>You can now access all features of the AI Attendance System.</p>
+                    <p>You can now access all features of the {SYSTEM_NAME}.</p>
                     <p>Thank you for completing your registration.</p>
                 </div>
                 <div class="footer">
-                    <p>&copy; 2025 AI Attendance System. All rights reserved.</p>
+                    <p>&copy; {YEAR} {SYSTEM_NAME}. All rights reserved.</p>
                 </div>
             </div>
         </body>
@@ -197,11 +190,11 @@ def send_verification_success_email(user):
         
         Your email address has been successfully verified!
         
-        You can now access all features of the AI Attendance System.
+        You can now access all features of the {SYSTEM_NAME}.
         
         Thank you for completing your registration.
         
-        © 2025 AI Attendance System. All rights reserved.
+        © {YEAR} {SYSTEM_NAME}. All rights reserved.
         """
         
         send_mail(
@@ -276,7 +269,7 @@ def send_student_welcome_email(user, token, created_by=None):
         bool: True if email sent successfully, False otherwise
     """
     try:
-        subject = 'Welcome to AI Attendance System - Verify Your Email'
+        subject = f'Welcome to {SYSTEM_NAME} - Verify Your Email'
         
         verification_token = str(token.token)
         frontend_url = get_frontend_url()
@@ -458,7 +451,7 @@ def send_student_welcome_email(user, token, created_by=None):
                     <div class="info-box">
                         <strong>📧 Email:</strong> {user.email}<br>
                         <strong>👤 Name:</strong> {user.get_full_name()}<br>
-                        <strong>🎓 Role:</strong> Student
+                        <strong>{SYSTEM_ICON} Role:</strong> Student
                     </div>
                     
                     <h3 class="section-title">📋 Next Steps:</h3>
@@ -488,7 +481,7 @@ def send_student_welcome_email(user, token, created_by=None):
                             <div class="step-number">4</div>
                             <div class="step-content">
                                 <strong>Register Your Face</strong>
-                                <span style="color: #6b7280;">Complete face registration for AI-powered attendance</span>
+                                <span style="color: #6b7280;">Complete face registration for {SYSTEM_NAME}</span>
                             </div>
                         </div>
                     </div>
@@ -511,7 +504,7 @@ def send_student_welcome_email(user, token, created_by=None):
                     </p>
                 </div>
                 <div class="footer">
-                    <p style="font-weight: 600; color: #1f2937;">© 2025 AI Attendance System</p>
+                    <p style="font-weight: 600; color: #1f2937;">© {YEAR} {SYSTEM_NAME}</p>
                     <p>All rights reserved.</p>
                     <p style="margin-top: 10px;">This is an automated message, please do not reply to this email.</p>
                 </div>
@@ -543,13 +536,13 @@ NEXT STEPS:
    Set a new secure password after your first login
    
 4. Register Your Face
-   Complete face registration for AI-powered attendance
+   Complete face registration for {SYSTEM_NAME}
 
 IMPORTANT: This verification link will expire in 48 hours.
 
 If you have any questions, please contact {teacher_name} or the system administrator.
 
-© 2025 AI Attendance System. All rights reserved.
+© {YEAR} {SYSTEM_NAME}. All rights reserved.
         """
         
         send_mail(
@@ -581,7 +574,7 @@ def send_teacher_approval_email(user, approved_by=None):
         bool: True if email sent successfully, False otherwise
     """
     try:
-        subject = 'Teacher Account Approved - AI Attendance System'
+        subject = f'Teacher Account Approved - {SYSTEM_NAME}'
         
         frontend_url = get_frontend_url()
         login_link = f"{frontend_url}/login"
@@ -629,7 +622,7 @@ def send_teacher_approval_email(user, approved_by=None):
                 <div class="content">
                     <div class="success-icon">✅</div>
                     
-                    <h2 style="color: #10b981; text-align: center;">Welcome to AI Attendance System</h2>
+                    <h2 style="color: #10b981; text-align: center;">Welcome to {SYSTEM_NAME}</h2>
                     
                     <p>Dear <strong>{user.get_full_name()}</strong>,</p>
                     
@@ -659,7 +652,7 @@ def send_teacher_approval_email(user, approved_by=None):
                     </p>
                 </div>
                 <div class="footer">
-                    <p>© 2025 AI Attendance System. All rights reserved.</p>
+                    <p>© {YEAR} {SYSTEM_NAME}. All rights reserved.</p>
                     <p>This is an automated message, please do not reply to this email.</p>
                 </div>
             </div>
@@ -677,7 +670,7 @@ def send_teacher_approval_email(user, approved_by=None):
         - Role: Teacher
         - Status: Active
         
-        You now have full access to the AI Attendance System.
+        You now have full access to the {SYSTEM_NAME}.
         
         Login here: {login_link}
         
@@ -690,7 +683,7 @@ def send_teacher_approval_email(user, approved_by=None):
         
         If you have any questions, please contact the system administrator.
         
-        © 2025 AI Attendance System. All rights reserved.
+        © {YEAR} {SYSTEM_NAME}. All rights reserved.
         """
         
         send_mail(

@@ -25,7 +25,6 @@ def api_root(request):
     """API root endpoint providing information about available endpoints."""
     return JsonResponse({
         'message': 'AI-based Attendance System API',
-        'version': '1.0.0',
         'endpoints': {
             'authentication': '/api/auth/',
             'students': '/api/students/',
