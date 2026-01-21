@@ -25,6 +25,7 @@ const FaceRecognition = () => {
   const [useWebSocket, setUseWebSocket] = useState(true) // Prefer WebSocket over polling
   const lastErrorMessageRef = useRef<string>('')
   const lastErrorTimeRef = useRef<number>(0)
+  const [isWirelessStreaming, setIsWirelessStreaming] = useState(false)
 
   useEffect(() => {
     loadMobileCameras()
@@ -45,6 +46,40 @@ const FaceRecognition = () => {
       setMobileCameras(activeCameras)
     } catch (error) {
       console.error('Failed to load cameras:', error)
+    }
+  }
+  
+  const handleStartWirelessStream = async (camera: ExternalCamera) => {
+    try {
+      setIsProcessing(true)
+      await cameraService.startWirelessStream(camera.id)
+      setIsWirelessStreaming(true)
+      toast.success(`Started streaming from ${camera.name}`)
+      
+      // Connect WebSocket or start polling
+      if (useWebSocket) {
+        connectWebSocket(camera.id)
+      } else {
+        startMobileCameraPolling(camera.id)
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to start stream')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+  
+  const handleStopWirelessStream = async (camera: ExternalCamera) => {
+    try {
+      await cameraService.stopWirelessStream(camera.id)
+      setIsWirelessStreaming(false)
+      stopMobileCameraPolling()
+      if (websocketRef.current) {
+        websocketRef.current.close()
+      }
+      toast.success('Stream stopped')
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Failed to stop stream')
     }
   }
 

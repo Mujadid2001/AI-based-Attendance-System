@@ -21,6 +21,11 @@ from .serializers import (
     CameraStreamSessionSerializer,
     ExternalCameraFrameSerializer
 )
+from .stream_handler import (
+    start_wireless_camera_stream,
+    stop_wireless_camera_stream,
+    get_active_stream
+)
 import base64
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -548,3 +553,146 @@ class ExternalCameraViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Error decoding frame: {e}")
             return HttpResponse(b'', content_type='image/jpeg', status=status.HTTP_204_NO_CONTENT)
+    
+    @action(detail=True, methods=['post'], url_path='start-stream')
+    def start_stream(self, request, pk=None):
+        """
+        Start continuous streaming from a wireless/IP camera.
+        Only works for IP cameras, RTSP, and HTTP streams.
+        """
+        camera_source = self.get_object()
+        
+        # Check if this is a wireless camera
+        if camera_source.device_type not in ['ip_camera', 'rtsp', 'http_stream']:
+            return Response(
+                {'error': _('This endpoint is only for wireless/IP cameras')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if stream URL is configured
+        if not camera_source.stream_url:
+            return Response(
+                {'error': _('Stream URL not configured for this camera')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Define callback for frames
+        def on_frame(frame_base64, timestamp):
+            """Callback when new frame is received from stream."""
+            # Cache frame
+            cache_key = f'mobile_camera_frame_{camera_source.id}'
+            cache.set(cache_key, frame_base64, timeout=30)
+            
+            # Broadcast to WebSocket clients
+            try:
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f'camera_{camera_source.id}',
+                        {
+                            'type': 'camera_frame',
+                            'frame': frame_base64,
+                            'timestamp': timestamp,
+                            'camera_id': str(camera_source.id),
+                            'camera_name': camera_source.name
+                        }
+                    )
+            except Exception as e:
+                logger.warning(f"WebSocket broadcast failed: {e}")
+        
+        # Start stream
+        handler = start_wireless_camera_stream(camera_source, on_frame)
+        
+        if handler:
+            return Response({
+                'message': _('Stream started successfully'),
+                'camera_id': str(camera_source.id),
+                'camera_name': camera_source.name,
+                'fps_limit': camera_source.fps_limit
+            })
+        else:
+            return Response(
+                {'error': _('Failed to start stream. Check camera URL and credentials.')},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=True, methods=['post'], url_path='stop-stream')
+    def stop_stream(self, request, pk=None):
+        """Stop continuous streaming from a wireless camera."""
+        camera_source = self.get_object()
+        
+        success = stop_wireless_camera_stream(str(camera_source.id))
+        
+        if success:
+            return Response({
+                'message': _('Stream stopped successfully'),
+                'camera_id': str(camera_source.id)
+            })
+        else:
+            return Response(
+                {'message': _('No active stream found for this camera')},
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    @action(detail=True, methods=['get'], url_path='stream-status')
+    def stream_status(self, request, pk=None):
+        """Get streaming status for a wireless camera."""
+        camera_source = self.get_object()
+        
+        handler = get_active_stream(str(camera_source.id))
+        
+        return Response({
+            'camera_id': str(camera_source.id),
+            'is_streaming': handler is not None and handler.is_running,
+            'device_type': camera_source.device_type,
+            'stream_url': camera_source.stream_url if camera_source.stream_url else None,
+            'fps_limit': camera_source.fps_limit,
+            'stream_quality': camera_source.stream_quality
+        })
+    
+    @action(detail=True, methods=['post'], url_path='test-connection')
+    def test_connection(self, request, pk=None):
+        """Test connection to a wireless camera and capture a single frame."""
+        camera_source = self.get_object()
+        
+        if camera_source.device_type not in ['ip_camera', 'rtsp', 'http_stream']:
+            return Response(
+                {'error': _('This endpoint is only for wireless/IP cameras')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not camera_source.stream_url:
+            return Response(
+                {'error': _('Stream URL not configured')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Try to capture a single frame
+        from .stream_handler import WirelessCameraStreamHandler
+        handler = WirelessCameraStreamHandler(camera_source)
+        
+        try:
+            frame_bytes = handler.get_single_frame()
+            
+            if frame_bytes:
+                # Encode to base64 for JSON response
+                frame_base64 = base64.b64encode(frame_bytes).decode('utf-8')
+                
+                return Response({
+                    'success': True,
+                    'message': _('Connection successful'),
+                    'frame': frame_base64,
+                    'camera_id': str(camera_source.id)
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'error': _('Failed to capture frame. Check URL and credentials.')
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            logger.error(f"Connection test failed: {e}")
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

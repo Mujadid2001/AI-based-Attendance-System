@@ -20,9 +20,17 @@ const ExternalCameras = () => {
   const [formData, setFormData] = useState({
     name: '',
     device_id: '',
-    device_type: 'mobile' as 'mobile' | 'tablet' | 'webcam' | 'other',
-    auto_mark_attendance: false
+    device_type: 'mobile' as 'mobile' | 'tablet' | 'webcam' | 'ip_camera' | 'rtsp' | 'http_stream' | 'other',
+    auto_mark_attendance: false,
+    stream_url: '',
+    stream_username: '',
+    stream_password: '',
+    stream_protocol: 'upload' as 'rtsp' | 'http' | 'https' | 'upload',
+    stream_quality: 'medium' as 'high' | 'medium' | 'low',
+    fps_limit: 5
   })
+  
+  const isWirelessCamera = ['ip_camera', 'rtsp', 'http_stream'].includes(formData.device_type)
 
   useEffect(() => {
     loadCameras()
@@ -53,7 +61,13 @@ const ExternalCameras = () => {
         name: '',
         device_id: '',
         device_type: 'mobile',
-        auto_mark_attendance: false
+        auto_mark_attendance: false,
+        stream_url: '',
+        stream_username: '',
+        stream_password: '',
+        stream_protocol: 'upload',
+        stream_quality: 'medium',
+        fps_limit: 5
       })
       loadCameras()
     } catch (error: any) {
@@ -90,9 +104,26 @@ const ExternalCameras = () => {
 
   const getDeviceIcon = (type: string) => {
     switch (type) {
-      case 'mobile':
-        return <IoPhonePortrait className="w-5 h-5" />
-      case 'tablet':
+      case 'ip_camera':
+      case 'rtsp':
+      case 'http_stream':
+        return <IoCamera className="w-5 h-5" />
+      default:
+        return <IoCamera className="w-5 h-5" />
+    }
+  }
+  
+  const getDeviceTypeName = (type: string) => {
+    const names: Record<string, string> = {
+      mobile: 'Mobile',
+      tablet: 'Tablet',
+      webcam: 'Webcam',
+      ip_camera: 'IP Camera',
+      rtsp: 'RTSP Stream',
+      http_stream: 'HTTP Stream',
+      other: 'Other'
+    }
+    return names[type] || type case 'tablet':
         return <IoTabletPortrait className="w-5 h-5" />
       case 'webcam':
         return <IoDesktop className="w-5 h-5" />
@@ -170,8 +201,16 @@ const ExternalCameras = () => {
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Device Type</span>
-                    <span className="font-medium capitalize">{camera.device_type}</span>
+                    <span className="font-medium">{getDeviceTypeName(camera.device_type)}</span>
                   </div>
+                  {camera.is_wireless_camera && camera.stream_url && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Stream</span>
+                      <span className="font-medium text-xs truncate max-w-[150px]" title={camera.stream_url}>
+                        {camera.stream_url.split('://')[0].toUpperCase()}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">Status</span>
                     <div className="flex items-center gap-2">
@@ -204,15 +243,35 @@ const ExternalCameras = () => {
                 )}
 
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => showQRCode(camera)}
-                    fullWidth
-                  >
-                    <IoQrCode className="w-4 h-4 mr-2" />
-                    QR Code
-                  </Button>
+                  {!camera.is_wireless_camera ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => showQRCode(camera)}
+                      fullWidth
+                    >
+                      <IoQrCode className="w-4 h-4 mr-2" />
+                      QR Code
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const result = await cameraService.testConnection(camera.id)
+                          if (result.success) {
+                            toast.success('Connection successful!')
+                          }
+                        } catch (error: any) {
+                          toast.error(error.response?.data?.error || 'Connection failed')
+                        }
+                      }}
+                      fullWidth
+                    >
+                      Test
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -258,12 +317,118 @@ const ExternalCameras = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Device ID
-            </label>
-            <input
-              type="text"
-              value={formData.device_id}
-              onChange={(e) => setFormData({ ...formData, device_id: e.target.value })}
-              className="input"
+            </label> Device</option>
+              <option value="tablet">Tablet</option>
+              <option value="webcam">External Webcam</option>
+              <option value="ip_camera">IP Camera / Wireless Camera</option>
+              <option value="rtsp">RTSP Stream</option>
+              <option value="http_stream">HTTP/MJPEG Stream</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          {/* Wireless Camera Fields */}
+          {isWirelessCamera && (
+            <>
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Stream Configuration</h4>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Stream URL *
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.stream_url}
+                      onChange={(e) => setFormData({ ...formData, stream_url: e.target.value })}
+                      className="input"
+                      required={isWirelessCamera}
+                      placeholder="rtsp://192.168.1.100:554/stream or http://camera-ip/video"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Examples: rtsp://192.168.1.100:554/stream, http://192.168.1.100/video
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Stream Protocol
+                      </label>
+                      <select
+                        value={formData.stream_protocol}
+                        onChange={(e) => setFormData({ ...formData, stream_protocol: e.target.value as any })}
+                        className="input"
+                      >
+                        <option value="rtsp">RTSP</option>
+                        <option value="http">HTTP/MJPEG</option>
+                        <option value="https">HTTPS</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Stream Quality
+                      </label>
+                      <select
+                        value={formData.stream_quality}
+                        onChange={(e) => setFormData({ ...formData, stream_quality: e.target.value as any })}
+                        className="input"
+                      >
+                        <option value="low">Low (640x480)</option>
+                        <option value="medium">Medium (1280x720)</option>
+                        <option value="high">High (Original)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      FPS Limit (1-30)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={formData.fps_limit}
+                      onChange={(e) => setFormData({ ...formData, fps_limit: parseInt(e.target.value) || 5 })}
+                      className="input"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Lower FPS reduces server load. Recommended: 5-10 FPS
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Username (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.stream_username}
+                      onChange={(e) => setFormData({ ...formData, stream_username: e.target.value })}
+                      className="input"
+                      placeholder="Camera username"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Password (optional)
+                    </label>
+                    <input
+                      type="password"
+                      value={formData.stream_password}
+                      onChange={(e) => setFormData({ ...formData, stream_password: e.target.value })}
+                      className="input"
+                      placeholder="Camera password"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}assName="input"
               required
               placeholder="e.g., mobile-001"
             />

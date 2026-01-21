@@ -4,7 +4,7 @@ export interface ExternalCamera {
   id: string;
   name: string;
   device_id: string;
-  device_type: 'mobile' | 'tablet' | 'webcam' | 'other';
+  device_type: 'mobile' | 'tablet' | 'webcam' | 'ip_camera' | 'rtsp' | 'http_stream' | 'other';
   status: 'active' | 'inactive' | 'disconnected';
   is_enabled: boolean;
   auto_mark_attendance: boolean;
@@ -17,6 +17,12 @@ export interface ExternalCamera {
   qr_code_url: string;
   camera_url: string;
   session_count: number;
+  stream_url?: string;
+  stream_username?: string;
+  stream_protocol?: 'rtsp' | 'http' | 'https' | 'upload';
+  stream_quality?: 'high' | 'medium' | 'low';
+  fps_limit?: number;
+  is_wireless_camera?: boolean;
 }
 
 export interface CameraStreamSession {
@@ -37,8 +43,14 @@ export interface CameraStreamSession {
 export interface CreateCameraData {
   name: string;
   device_id: string;
-  device_type: 'mobile' | 'tablet' | 'webcam' | 'other';
+  device_type: 'mobile' | 'tablet' | 'webcam' | 'ip_camera' | 'rtsp' | 'http_stream' | 'other';
   auto_mark_attendance?: boolean;
+  stream_url?: string;
+  stream_username?: string;
+  stream_password?: string;
+  stream_protocol?: 'rtsp' | 'http' | 'https' | 'upload';
+  stream_quality?: 'high' | 'medium' | 'low';
+  fps_limit?: number;
 }
 
 class CameraService {
@@ -152,6 +164,38 @@ class CameraService {
 
   /**
    * Get latest frame from mobile camera for live streaming
+
+  /**
+   * Start wireless camera stream
+   */
+  async startWirelessStream(cameraId: string): Promise<any> {
+    const response = await api.post(`/camera/sources/${cameraId}/start-stream/`);
+    return response.data;
+  }
+
+  /**
+   * Stop wireless camera stream
+   */
+  async stopWirelessStream(cameraId: string): Promise<any> {
+    const response = await api.post(`/camera/sources/${cameraId}/stop-stream/`);
+    return response.data;
+  }
+
+  /**
+   * Get wireless camera stream status
+   */
+  async getStreamStatus(cameraId: string): Promise<any> {
+    const response = await api.get(`/camera/sources/${cameraId}/stream-status/`);
+    return response.data;
+  }
+
+  /**
+   * Test wireless camera connection
+   */
+  async testConnection(cameraId: string): Promise<any> {
+    const response = await api.post(`/camera/sources/${cameraId}/test-connection/`);
+    return response.data;
+  }
    * Returns a URL that can be used as an image src
    */
   getLatestFrameUrl(cameraId: string): string {

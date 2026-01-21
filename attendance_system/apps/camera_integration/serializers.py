@@ -13,6 +13,7 @@ class ExternalCameraSourceSerializer(serializers.ModelSerializer):
     qr_code_url = serializers.SerializerMethodField()
     camera_url = serializers.SerializerMethodField()
     session_count = serializers.SerializerMethodField()
+    is_wireless_camera = serializers.SerializerMethodField()
     
     class Meta:
         model = ExternalCameraSource
@@ -21,9 +22,14 @@ class ExternalCameraSourceSerializer(serializers.ModelSerializer):
             'last_connected', 'is_enabled', 'auto_mark_attendance',
             'created_by', 'created_by_username', 'created_by_name',
             'created_at', 'updated_at', 'qr_code_url', 'camera_url',
-            'session_count', 'access_token'
+            'session_count', 'access_token', 'stream_url', 'stream_username',
+            'stream_protocol', 'stream_quality', 'fps_limit', 'is_wireless_camera'
         ]
         read_only_fields = ['id', 'access_token', 'created_at', 'updated_at', 'status', 'last_connected']
+        extra_kwargs = {
+            'stream_password': {'write_only': True},
+            'stream_username': {'required': False},
+        }
     
     def get_qr_code_url(self, obj):
         """Get URL for QR code generation."""
@@ -52,14 +58,43 @@ class ExternalCameraSourceSerializer(serializers.ModelSerializer):
     def get_session_count(self, obj):
         """Get total session count."""
         return obj.stream_sessions.count()
+    
+    def get_is_wireless_camera(self, obj):
+        """Check if this is a wireless/IP camera."""
+        return obj.device_type in ['ip_camera', 'rtsp', 'http_stream']
 
 
 class ExternalCameraSourceCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating External Camera Source."""
     
+    stream_password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    
     class Meta:
         model = ExternalCameraSource
-        fields = ['name', 'device_id', 'device_type', 'auto_mark_attendance']
+        fields = [
+            'name', 'device_id', 'device_type', 'auto_mark_attendance',
+            'stream_url', 'stream_username', 'stream_password', 
+            'stream_protocol', 'stream_quality', 'fps_limit'
+        ]
+    
+    def validate(self, data):
+        """Validate that wireless cameras have required stream_url."""
+        device_type = data.get('device_type')
+        stream_url = data.get('stream_url')
+        
+        if device_type in ['ip_camera', 'rtsp', 'http_stream'] and not stream_url:
+            raise serializers.ValidationError({
+                'stream_url': 'Stream URL is required for wireless/IP cameras'
+            })
+        
+        # Validate FPS limit
+        fps_limit = data.get('fps_limit', 5)
+        if fps_limit and (fps_limit < 1 or fps_limit > 30):
+            raise serializers.ValidationError({
+                'fps_limit': 'FPS limit must be between 1 and 30'
+            })
+        
+        return data
     
     def create(self, validated_data):
         validated_data['created_by'] = self.context['request'].user

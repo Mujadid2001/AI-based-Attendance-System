@@ -22,9 +22,55 @@ class ExternalCameraSource(models.Model):
             ('mobile', _('Mobile Device')),
             ('tablet', _('Tablet')),
             ('webcam', _('External Webcam')),
+            ('ip_camera', _('IP Camera / Wireless Camera')),
+            ('rtsp', _('RTSP Stream')),
+            ('http_stream', _('HTTP/MJPEG Stream')),
             ('other', _('Other'))
         ],
         default='mobile'
+    )
+    
+    # Wireless/IP Camera specific fields
+    stream_url = models.URLField(
+        max_length=512,
+        blank=True,
+        null=True,
+        help_text=_("Stream URL for IP cameras (rtsp://, http://, etc.)")
+    )
+    stream_username = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Username for authenticated streams")
+    )
+    stream_password = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Password for authenticated streams")
+    )
+    stream_protocol = models.CharField(
+        max_length=20,
+        choices=[
+            ('rtsp', 'RTSP'),
+            ('http', 'HTTP/MJPEG'),
+            ('https', 'HTTPS'),
+            ('upload', 'Manual Upload')
+        ],
+        default='upload',
+        help_text=_("Protocol used for streaming")
+    )
+    stream_quality = models.CharField(
+        max_length=20,
+        choices=[
+            ('high', _('High Quality')),
+            ('medium', _('Medium Quality')),
+            ('low', _('Low Quality'))
+        ],
+        default='medium',
+        help_text=_("Stream quality/resolution preference")
+    )
+    fps_limit = models.IntegerField(
+        default=5,
+        help_text=_("Frames per second limit for processing (1-30)")
     )
     
     # Security and authentication
