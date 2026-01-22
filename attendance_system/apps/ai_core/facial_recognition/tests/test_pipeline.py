@@ -42,11 +42,11 @@ class TestFacialRecognitionPipeline(unittest.TestCase):
         mock_encodings.return_value = [mock_encoding]
         
         # Register face
-        success, encoding, message = self.pipeline.register_face(test_image, "student123")
+        success, encoding, message, metadata = self.pipeline.register_face(test_image, "student123")
         
         self.assertTrue(success)
         self.assertIsNotNone(encoding)
-        self.assertEqual(message, "Face registered successfully")
+        self.assertIn("Face registered successfully", message)
         self.assertEqual(self.pipeline.storage.count(), 1)
     
     @patch('face_recognition.face_locations')
@@ -55,7 +55,7 @@ class TestFacialRecognitionPipeline(unittest.TestCase):
         test_image = np.zeros((480, 640, 3), dtype=np.uint8)
         mock_locations.return_value = []
         
-        success, encoding, message = self.pipeline.register_face(test_image, "student123")
+        success, encoding, message, metadata = self.pipeline.register_face(test_image, "student123")
         
         self.assertFalse(success)
         self.assertIsNone(encoding)
@@ -67,7 +67,7 @@ class TestFacialRecognitionPipeline(unittest.TestCase):
         test_image = np.zeros((480, 640, 3), dtype=np.uint8)
         mock_locations.return_value = [(100, 200, 300, 100), (400, 500, 600, 400)]
         
-        success, encoding, message = self.pipeline.register_face(test_image, "student123")
+        success, encoding, message, metadata = self.pipeline.register_face(test_image, "student123")
         
         self.assertFalse(success)
         self.assertIsNone(encoding)
