@@ -7,6 +7,7 @@ from .recognizers import FaceRecognitionLibRecognizer
 from .liveness import BlinkLivenessDetector
 from .storage import TrainingDataStorage
 from .utils import FaceQualityChecker
+from .fallback_manager import FallbackDetectionManager
 
 
 logger = logging.getLogger(__name__)
@@ -35,14 +36,14 @@ except ImportError:
 class FacialRecognitionPipeline:
     """Orchestrator for facial recognition operations.
     
-    Uses a multi-model approach for maximum accuracy:
-    1. CNN model for face detection (falls back to HOG if needed)
-    2. Large model for face encoding (falls back to small model if needed)
+    Uses a multi-model approach with cascading fallback for maximum robustness:
+    1. Face detection with fallback: CNN → DNN-SSD → MTCNN → Dlib → HOG → Haar Cascade
+    2. Face encoding with fallback: Large model → Small model
     3. Distance-based matching with ambiguity detection
     """
     
-    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.35, storage=None, enable_quality_checks=True):
-        """Initialize pipeline with accurate model hierarchy.
+    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.35, storage=None, enable_quality_checks=True, enable_fallback=True):
+        """Initialize pipeline with accurate model hierarchy and fallback support.
         
         Args:
             face_detector: Optional face detector (uses default if None)
@@ -50,9 +51,11 @@ class FacialRecognitionPipeline:
             confidence_threshold: Minimum confidence for recognition (0.35 = 65% match accuracy, adjusted for low quality webcams)
             storage: Optional training data storage
             enable_quality_checks: Whether to check image quality during registration
+            enable_fallback: Whether to enable cascading fallback detection methods
         """
         self.confidence_threshold = confidence_threshold
         self.enable_quality_checks = enable_quality_checks
+        self.enable_fallback = enable_fallback
         
         # Initialize storage
         if storage:
@@ -73,7 +76,15 @@ class FacialRecognitionPipeline:
         # Initialize liveness detector
         self.liveness_detector = BlinkLivenessDetector()
         
-        # Initialize face detector
+        # Initialize fallback detection manager
+        if self.enable_fallback:
+            self.fallback_manager = FallbackDetectionManager(enable_all_methods=True)
+            logger.info("Fallback detection enabled - will try multiple detection methods")
+        else:
+            self.fallback_manager = None
+            logger.info("Fallback detection disabled - using single detection method")
+        
+        # Initialize face detector (legacy support)
         if face_detector:
             self.face_detector = face_detector
         elif HAS_CV2:
@@ -102,18 +113,22 @@ class FacialRecognitionPipeline:
         return image
 
     def _extract_face_encoding(self, image, check_quality=True):
-        """Extract face encoding from image with optional quality checks.
-        Uses accurate CNN model first, falls back to HOG if needed for better accuracy.
+        """Extract face encoding from image with fallback detection methods.
+        
+        Uses cascading fallback approach:
+        1. Try multiple detection methods (CNN → DNN → MTCNN → Dlib → HOG → Haar)
+        2. Try multiple encoding models (Large → Small)
+        3. Only fail when ALL methods have been exhausted
         
         Args:
             image: Input image
             check_quality: Whether to perform quality checks
             
         Returns:
-            Tuple of (encoding, error_message, face_location)
+            Tuple of (encoding, error_message, face_location, metadata)
         """
         if not HAS_FACE_RECOGNITION:
-            return None, "Face recognition library not available", None
+            return None, "Face recognition library not available", None, None
         
         try:
             rgb_image = self._convert_to_rgb(image)
@@ -137,31 +152,49 @@ class FacialRecognitionPipeline:
                 kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
                 rgb_image = cv2.filter2D(rgb_image, -1, kernel)
             
-            # Try CNN model first (most accurate)
-            logger.info("Attempting face detection with CNN model (most accurate)...")
-            face_locations = face_recognition.face_locations(rgb_image, model='cnn')
-            model_used = 'cnn'
+            # Use fallback detection if enabled
+            if self.enable_fallback and self.fallback_manager:
+                logger.info("Using cascading fallback detection...")
+                detection_result = self.fallback_manager.detect_faces_with_fallback(rgb_image)
+                
+                if not detection_result['success']:
+                    error_msg = f"No face detected by any method. Tried: {', '.join(detection_result['attempts'])}"
+                    logger.error(f"✗ All detection methods failed: {error_msg}")
+                    return None, error_msg, None, detection_result
+                
+                face_locations = detection_result['face_locations']
+                method_used = detection_result['method_used']
+                
+                logger.info(f"✓ Face detected using {method_used.upper()} (after trying: {', '.join(detection_result['attempts'])})")
             
-            # Fallback to HOG if CNN fails to detect
-            if len(face_locations) == 0:
-                logger.info("CNN model failed to detect face, falling back to HOG model...")
-                face_locations = face_recognition.face_locations(rgb_image, model='hog')
-                model_used = 'hog'
+            else:
+                # Legacy single-method detection (CNN → HOG fallback only)
+                logger.info("Attempting face detection with CNN model (most accurate)...")
+                face_locations = face_recognition.face_locations(rgb_image, model='cnn')
+                method_used = 'cnn'
+                
+                # Fallback to HOG if CNN fails to detect
+                if len(face_locations) == 0:
+                    logger.info("CNN model failed to detect face, falling back to HOG model...")
+                    face_locations = face_recognition.face_locations(rgb_image, model='hog')
+                    method_used = 'hog'
+                
+                if len(face_locations) == 0:
+                    return None, "No face detected in image (tried CNN and HOG models)", None, {'method_used': None}
+                
+                detection_result = {'method_used': method_used, 'attempts': ['cnn', 'hog']}
             
-            if len(face_locations) == 0:
-                return None, "No face detected in image (tried CNN and HOG models)", None
-            elif len(face_locations) > 1:
-                return None, "Multiple faces detected. Please ensure only one face is visible.", None
+            if len(face_locations) > 1:
+                return None, "Multiple faces detected. Please ensure only one face is visible.", None, detection_result
             
             face_location = face_locations[0]
-            logger.info(f"Face detected successfully using {model_used.upper()} model")
             
             # Perform quality checks if enabled
             if check_quality and self.enable_quality_checks:
                 quality_results = FaceQualityChecker.check_all(image, face_location)
                 if not quality_results['overall_pass']:
                     error_msg = "Image quality issues: " + "; ".join(quality_results['messages'])
-                    return None, error_msg, face_location
+                    return None, error_msg, face_location, detection_result
             
             # Align face for better recognition
             aligned_face = image
@@ -173,28 +206,48 @@ class FacialRecognitionPipeline:
                 else:
                     aligned_face = image
             
-            # Extract encoding from aligned face using CNN for maximum accuracy
+            # Extract encoding from aligned face with model fallback
             rgb_aligned = self._convert_to_rgb(aligned_face)
             
-            # Try with CNN model first (num_jitters=1 for balance of speed/accuracy)
-            encodings = face_recognition.face_encodings(rgb_aligned, [face_location], num_jitters=1, model='large')
-            
-            if encodings:
-                logger.info("Face encoding generated successfully using large model")
-                return encodings[0], None, face_location
-            else:
-                # Fallback to small model if large fails
-                logger.warning("Large model encoding failed, trying small model...")
-                encodings = face_recognition.face_encodings(rgb_aligned, [face_location], num_jitters=1, model='small')
-                if encodings:
-                    logger.info("Face encoding generated successfully using small model")
-                    return encodings[0], None, face_location
+            if self.enable_fallback and self.fallback_manager:
+                # Use fallback manager for encoding extraction
+                encoding_result = self.fallback_manager.extract_encoding_with_fallback(
+                    rgb_aligned, 
+                    face_location
+                )
+                
+                if encoding_result['success']:
+                    logger.info(f"✓ Encoding extracted using {encoding_result['model_used'].upper()} model")
+                    detection_result['encoding_model'] = encoding_result['model_used']
+                    return encoding_result['encoding'], None, face_location, detection_result
                 else:
-                    return None, "Failed to generate face encoding", face_location
+                    error_msg = "Failed to generate encoding with all available models"
+                    logger.error(f"✗ {error_msg}")
+                    return None, error_msg, face_location, detection_result
+            
+            else:
+                # Legacy encoding extraction (Large → Small fallback)
+                # Try with large model first
+                encodings = face_recognition.face_encodings(rgb_aligned, [face_location], num_jitters=1, model='large')
+                
+                if encodings:
+                    logger.info("Face encoding generated successfully using large model")
+                    detection_result['encoding_model'] = 'large'
+                    return encodings[0], None, face_location, detection_result
+                else:
+                    # Fallback to small model if large fails
+                    logger.warning("Large model encoding failed, trying small model...")
+                    encodings = face_recognition.face_encodings(rgb_aligned, [face_location], num_jitters=1, model='small')
+                    if encodings:
+                        logger.info("Face encoding generated successfully using small model")
+                        detection_result['encoding_model'] = 'small'
+                        return encodings[0], None, face_location, detection_result
+                    else:
+                        return None, "Failed to generate face encoding", face_location, detection_result
                 
         except Exception as e:
             logger.error(f"Error extracting face encoding: {e}")
-            return None, str(e), None
+            return None, str(e), None, None
 
     def register_face(self, image, student_id: str, check_quality=True):
         """Register face for a student with quality validation.
@@ -205,15 +258,15 @@ class FacialRecognitionPipeline:
             check_quality: Whether to perform quality checks
             
         Returns:
-            Tuple of (success, encoding, message)
+            Tuple of (success, encoding, message, metadata)
         """
         if not HAS_FACE_RECOGNITION:
-            return False, None, "Face recognition library not available"
+            return False, None, "Face recognition library not available", None
         
         try:
-            encoding, error_msg, face_location = self._extract_face_encoding(image, check_quality)
+            encoding, error_msg, face_location, metadata = self._extract_face_encoding(image, check_quality)
             if error_msg:
-                return False, None, error_msg
+                return False, None, error_msg, metadata
             
             # Generate augmentations for robustness
             from .utils import DataAugmentation
@@ -223,7 +276,7 @@ class FacialRecognitionPipeline:
             
             # Extract encodings from augmentations
             for aug_image in augmentations:
-                aug_encoding, _, _ = self._extract_face_encoding(aug_image, check_quality=False)
+                aug_encoding, _, _, _ = self._extract_face_encoding(aug_image, check_quality=False)
                 if aug_encoding is not None:
                     encodings.append(aug_encoding)
             
@@ -239,10 +292,14 @@ class FacialRecognitionPipeline:
             # Store averaged encoding
             self.storage.add_encoding(student_id, final_encoding)
             
-            return True, final_encoding, "Face registered successfully"
+            success_msg = f"Face registered successfully using {metadata.get('method_used', 'unknown')} detection"
+            if 'encoding_model' in metadata:
+                success_msg += f" and {metadata['encoding_model']} encoding model"
+            
+            return True, final_encoding, success_msg, metadata
         except Exception as e:
             logger.error(f"Error registering face: {e}")
-            return False, None, f"Error: {str(e)}"
+            return False, None, f"Error: {str(e)}", None
     
     def load_training_data(self, path: str):
         """Load training data from file."""
@@ -258,14 +315,14 @@ class FacialRecognitionPipeline:
     
     def recognize_face(self, image, return_all_matches: bool = False):
         """
-        Recognize face in image against stored encodings.
+        Recognize face in image against stored encodings with cascading fallback.
         
         Args:
             image: Image in numpy/cv2 format
             return_all_matches: Whether to return all matches (for debugging)
             
         Returns:
-            dict with recognition results
+            dict with recognition results including detection metadata
         """
         if not HAS_FACE_RECOGNITION or self.storage.count() == 0:
             logger.warning(f"Recognition failed: HAS_FACE_RECOGNITION={HAS_FACE_RECOGNITION}, storage count={self.storage.count()}")
@@ -277,13 +334,14 @@ class FacialRecognitionPipeline:
             }
         
         try:
-            encoding, error_msg, face_location = self._extract_face_encoding(image, check_quality=False)
+            encoding, error_msg, face_location, metadata = self._extract_face_encoding(image, check_quality=False)
             if error_msg:
                 return {
                     'success': False,
                     'error': error_msg,
                     'face_detected': 'No face' not in error_msg,
-                    'confidence': 0.0
+                    'confidence': 0.0,
+                    'detection_metadata': metadata
                 }
             
             # Compare against all known encodings using accurate distance metric
@@ -305,7 +363,8 @@ class FacialRecognitionPipeline:
                     'success': False,
                     'error': 'No valid encodings to compare against',
                     'face_detected': True,
-                    'confidence': 0.0
+                    'confidence': 0.0,
+                    'detection_metadata': metadata
                 }
             
             # Convert to numpy array for face_recognition library
@@ -330,7 +389,8 @@ class FacialRecognitionPipeline:
                     'success': False,
                     'error': 'No known encodings to compare against',
                     'face_detected': True,
-                    'confidence': 0.0
+                    'confidence': 0.0,
+                    'detection_metadata': metadata
                 }
             
             # Find best match using distance (lower is better)
@@ -351,13 +411,21 @@ class FacialRecognitionPipeline:
             
             if matches[best_match_index] and confidence >= self.confidence_threshold:
                 student_id = valid_ids[best_match_index]
-                logger.info(f"✓ Face recognized: student_id={student_id}, confidence={confidence:.3f}, distance={best_distance:.3f}")
+                
+                # Log detection method used
+                detection_info = ""
+                if metadata:
+                    detection_info = f" (detected with {metadata.get('method_used', 'unknown')})"
+                
+                logger.info(f"✓ Face recognized: student_id={student_id}, confidence={confidence:.3f}, distance={best_distance:.3f}{detection_info}")
+                
                 return {
                     'success': True,
                     'student_id': student_id,
                     'confidence': float(confidence),
                     'distance': float(best_distance),
-                    'face_detected': True
+                    'face_detected': True,
+                    'detection_metadata': metadata
                 }
             else:
                 logger.warning(f"✗ Recognition failed: best_confidence={confidence:.3f}, threshold={self.confidence_threshold}, match={matches[best_match_index]}")
@@ -366,7 +434,8 @@ class FacialRecognitionPipeline:
                     'error': f'No match found (best confidence: {confidence:.3f}, required: {self.confidence_threshold})',
                     'face_detected': True,
                     'confidence': float(confidence),
-                    'distance': float(best_distance)
+                    'distance': float(best_distance),
+                    'detection_metadata': metadata
                 }
         
         except Exception as e:
@@ -385,3 +454,20 @@ class FacialRecognitionPipeline:
         except Exception as e:
             logger.error(f"Error checking liveness: {e}")
             return True  # Assume live on error
+    
+    def get_detection_statistics(self):
+        """Get detection statistics from fallback manager.
+        
+        Returns:
+            Dict with detection method usage statistics, or None if fallback disabled
+        """
+        if self.enable_fallback and self.fallback_manager:
+            return self.fallback_manager.get_detection_statistics()
+        return None
+    
+    def log_detection_statistics(self):
+        """Log detection statistics."""
+        if self.enable_fallback and self.fallback_manager:
+            self.fallback_manager.log_statistics()
+        else:
+            logger.info("Fallback detection is disabled - no statistics available")

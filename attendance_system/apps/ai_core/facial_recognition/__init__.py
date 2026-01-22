@@ -37,6 +37,9 @@ from .alignment import FaceAligner, SimpleFaceAligner
 # Export storage
 from .storage import TrainingDataStorage
 
+# Export fallback manager
+from .fallback_manager import FallbackDetectionManager, DetectionMethod, RecognitionModel
+
 # Export main pipeline
 from .pipeline import FacialRecognitionPipeline
 
@@ -70,6 +73,11 @@ __all__ = [
     
     # Storage
     'TrainingDataStorage',
+    
+    # Fallback manager
+    'FallbackDetectionManager',
+    'DetectionMethod',
+    'RecognitionModel',
     
     # Main pipeline
     'FacialRecognitionPipeline',
