@@ -196,6 +196,9 @@ class CameraService {
     const response = await api.post(`/camera/sources/${cameraId}/test-connection/`);
     return response.data;
   }
+
+  /**
+   * Get the latest camera frame URL
    * Returns a URL that can be used as an image src
    */
   getLatestFrameUrl(cameraId: string): string {

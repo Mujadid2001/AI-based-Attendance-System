@@ -123,13 +123,7 @@ const ExternalCameras = () => {
       http_stream: 'HTTP Stream',
       other: 'Other'
     }
-    return names[type] || type case 'tablet':
-        return <IoTabletPortrait className="w-5 h-5" />
-      case 'webcam':
-        return <IoDesktop className="w-5 h-5" />
-      default:
-        return <IoCamera className="w-5 h-5" />
-    }
+    return names[type] || type
   }
 
   const getStatusBadge = (status: string) => {
@@ -317,7 +311,28 @@ const ExternalCameras = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Device ID
-            </label> Device</option>
+            </label>
+            <input
+              type="text"
+              value={formData.device_id}
+              onChange={(e) => setFormData({ ...formData, device_id: e.target.value })}
+              className="input"
+              required
+              placeholder="e.g., CAM-001"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Device Type
+            </label>
+            <select
+              value={formData.device_type || 'mobile'}
+              onChange={(e) => setFormData({ ...formData, device_type: e.target.value })}
+              className="input"
+              required
+            >
+              <option value="mobile">Mobile Device</option>
               <option value="tablet">Tablet</option>
               <option value="webcam">External Webcam</option>
               <option value="ip_camera">IP Camera / Wireless Camera</option>
@@ -428,27 +443,7 @@ const ExternalCameras = () => {
                 </div>
               </div>
             </>
-          )}assName="input"
-              required
-              placeholder="e.g., mobile-001"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Device Type
-            </label>
-            <select
-              value={formData.device_type}
-              onChange={(e) => setFormData({ ...formData, device_type: e.target.value as any })}
-              className="input"
-            >
-              <option value="mobile">Mobile</option>
-              <option value="tablet">Tablet</option>
-              <option value="webcam">Webcam</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
+          )}
 
           <div className="flex items-center gap-2">
             <input
