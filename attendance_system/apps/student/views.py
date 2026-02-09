@@ -179,7 +179,7 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Filter enrollments by student if provided."""
-        queryset = Enrollment.objects.all()
+        queryset = Enrollment.objects.all().order_by('-enrollment_date', 'course__name')
         
         # Students can only see their own enrollments
         if self.request.user.is_student():

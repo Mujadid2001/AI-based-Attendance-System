@@ -14,12 +14,13 @@ from django.views.decorators.csrf import csrf_exempt
 from apps.authentication.serializers import (
     UserRegistrationSerializer, UserLoginSerializer, UserSerializer,
     UserUpdateSerializer, ChangePasswordSerializer, LoginLogSerializer,
-    EmailVerificationSerializer, ResendVerificationSerializer
+    EmailVerificationSerializer, ResendVerificationSerializer,
+    PasswordResetRequestSerializer, PasswordResetConfirmSerializer
 )
-from apps.authentication.models import LoginLog, EmailVerificationToken
+from apps.authentication.models import LoginLog, EmailVerificationToken, PasswordResetToken
 from apps.authentication.email_utils import (
     send_verification_email, send_verification_success_email, resend_verification_email,
-    send_teacher_approval_email
+    send_teacher_approval_email, send_password_reset_email, send_password_reset_success_email
 )
 from apps.authentication.permissions import IsAdmin
 from apps.student.models import StudentProfile
@@ -263,8 +264,15 @@ class AuthenticationViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def me(self, request):
         """Get current user details."""
-        serializer = UserSerializer(request.user)
-        return Response(serializer.data)
+        try:
+            serializer = UserSerializer(request.user)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error in /me/ endpoint: {e}")
+            return Response(
+                {'error': 'Failed to retrieve user details'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=False, methods=['put'], permission_classes=[IsAuthenticated], url_path='profile-update')
     def profile_update(self, request):
@@ -386,6 +394,98 @@ class AuthenticationViewSet(viewsets.ViewSet):
                     {'error': result['message']},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='forgot-password')
+    def forgot_password(self, request):
+        """Request password reset."""
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            
+            # Try to get user - if user doesn't exist, we still return success for security
+            try:
+                user = User.objects.get(email=email)
+                
+                if not user.is_active:
+                    # Don't create token for inactive users but still return success
+                    return Response(
+                        {'message': _('If an account with this email exists, you will receive a password reset email shortly.')},
+                        status=status.HTTP_200_OK
+                    )
+                
+                # Deactivate any existing password reset tokens for this user
+                PasswordResetToken.objects.filter(
+                    user=user,
+                    is_used=False
+                ).update(is_used=True)
+                
+                # Create new password reset token
+                token = PasswordResetToken.objects.create(
+                    user=user,
+                    ip_address=self.get_client_ip(request),
+                    user_agent=request.META.get('HTTP_USER_AGENT', '')[:500]  # Limit length
+                )
+                
+                # Send password reset email
+                email_sent = send_password_reset_email(
+                    user, 
+                    token, 
+                    ip_address=self.get_client_ip(request)
+                )
+                
+                logger.info(f"Password reset requested for user: {user.email} from IP: {self.get_client_ip(request)}")
+                
+            except User.DoesNotExist:
+                # For security, don't reveal if email exists
+                logger.info(f"Password reset requested for non-existent email: {email} from IP: {self.get_client_ip(request)}")
+            
+            # Always return success response for security
+            return Response(
+                {'message': _('If an account with this email exists, you will receive a password reset email shortly.')},
+                status=status.HTTP_200_OK
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='reset-password')
+    def reset_password(self, request):
+        """Confirm password reset with token."""
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        if serializer.is_valid():
+            token = serializer.validated_data['token']
+            new_password = serializer.validated_data['new_password']
+            user = token.user
+            
+            # Set new password
+            user.set_password(new_password)
+            user.save()
+            
+            # Mark token as used
+            token.is_used = True
+            token.save()
+            
+            # Deactivate all other password reset tokens for this user
+            PasswordResetToken.objects.filter(
+                user=user,
+                is_used=False
+            ).exclude(id=token.id).update(is_used=True)
+            
+            # Send success notification email
+            send_password_reset_success_email(
+                user,
+                ip_address=self.get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', '')
+            )
+            
+            logger.info(f"Password reset completed for user: {user.email} from IP: {self.get_client_ip(request)}")
+            
+            return Response(
+                {
+                    'message': _('Password reset successful! You can now log in with your new password.'),
+                    'user': UserSerializer(user).data
+                },
+                status=status.HTTP_200_OK
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])

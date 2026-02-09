@@ -701,3 +701,299 @@ def send_teacher_approval_email(user, approved_by=None):
     except Exception as e:
         logger.error(f"Failed to send teacher approval email to {user.email}: {e}")
         return False
+
+
+def send_password_reset_email(user, token, ip_address=None):
+    """
+    Send password reset email to user.
+    
+    Args:
+        user: User instance
+        token: PasswordResetToken instance
+        ip_address: IP address from which reset was requested
+    
+    Returns:
+        bool: True if email sent successfully, False otherwise
+    """
+    try:
+        subject = f'Password Reset Request - {SYSTEM_NAME}'
+        
+        # Password reset token to be used by frontend
+        reset_token = str(token.token)
+        
+        # Create reset link for frontend
+        frontend_url = get_frontend_url()
+        reset_link = f"{frontend_url}/reset-password?token={reset_token}"
+        
+        # Create HTML message with security information
+        html_message = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #dc2626; color: white; padding: 20px; text-align: center; }}
+                .content {{ padding: 20px; background-color: #f9f9f9; }}
+                .button {{
+                    display: inline-block;
+                    padding: 12px 30px;
+                    margin: 20px 0;
+                    background-color: #dc2626;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    font-weight: bold;
+                }}
+                .button:hover {{ background-color: #b91c1c; }}
+                .token-box {{ 
+                    background-color: #f0f0f0; 
+                    border: 1px solid #dc2626; 
+                    padding: 15px; 
+                    margin: 20px 0; 
+                    text-align: center; 
+                    font-family: monospace; 
+                    font-size: 12px; 
+                    word-break: break-all;
+                    border-radius: 5px;
+                }}
+                .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; }}
+                .security-info {{ background-color: #fef2f2; padding: 15px; border-left: 4px solid #dc2626; margin: 15px 0; }}
+                .warning {{ background-color: #fffbeb; padding: 15px; border-left: 4px solid #f59e0b; margin: 15px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔐 Password Reset Request</h1>
+                </div>
+                <div class="content">
+                    <h2>Hello {user.get_full_name() or user.email},</h2>
+                    <p>We received a request to reset the password for your {SYSTEM_NAME} account.</p>
+                    
+                    <div style="text-align: center;">
+                        <a href="{reset_link}" class="button">Reset Password</a>
+                    </div>
+                    
+                    <p style="text-align: center; color: #666; font-size: 12px;">Or copy this link:</p>
+                    <div class="token-box">
+                        <a href="{reset_link}" style="color: #dc2626; text-decoration: none; word-wrap: break-word;">{reset_link}</a>
+                    </div>
+                    
+                    <div class="security-info">
+                        <strong>🛡️ Security Information:</strong><br>
+                        • This link will expire in <strong>1 hour</strong> for your security<br>
+                        • Request time: {token.created_at.strftime('%Y-%m-%d at %H:%M:%S UTC')}<br>
+                        {f"• Requested from IP: {ip_address}" if ip_address else ""}<br>
+                        • Only the most recent reset link will work
+                    </div>
+                    
+                    <div class="warning">
+                        <strong>⚠️ Important:</strong><br>
+                        • If you didn't request this password reset, please ignore this email<br>
+                        • Your password will not be changed unless you click the link above<br>
+                        • For security concerns, contact our support team immediately
+                    </div>
+                    
+                    <p><strong>Need help?</strong> If you're having trouble with the link above, you can use this reset token directly on our password reset page:</p>
+                    <div class="token-box" style="background-color: #fffbeb; border-color: #f59e0b;">
+                        <strong>Reset Token:</strong><br>
+                        {reset_token}
+                    </div>
+                </div>
+                <div class="footer">
+                    <p>&copy; {YEAR} {SYSTEM_NAME}. All rights reserved.</p>
+                    <p>This is an automated security email. Please do not reply.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Create plain text message as fallback
+        text_message = f"""
+        Password Reset Request - {SYSTEM_NAME}
+        
+        Hello {user.get_full_name() or user.email},
+        
+        We received a request to reset the password for your {SYSTEM_NAME} account.
+        
+        To reset your password, visit the following link:
+        {reset_link}
+        
+        Or use this reset token on our password reset page:
+        {reset_token}
+        
+        Security Information:
+        • This link will expire in 1 hour for your security
+        • Request time: {token.created_at.strftime('%Y-%m-%d at %H:%M:%S UTC')}
+        {f"• Requested from IP: {ip_address}" if ip_address else ""}
+        • Only the most recent reset link will work
+        
+        Important:
+        • If you didn't request this password reset, please ignore this email
+        • Your password will not be changed unless you click the link above
+        • For security concerns, contact our support team immediately
+        
+        {SYSTEM_NAME} Team
+        
+        This is an automated security email. Please do not reply.
+        """
+        
+        # Send email
+        sent = send_mail(
+            subject=subject,
+            message=text_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+            html_message=html_message
+        )
+        
+        if sent:
+            logger.info(f"Password reset email sent to {user.email}")
+        else:
+            logger.warning(f"Password reset email sending returned False for {user.email}")
+            
+        return bool(sent)
+        
+    except Exception as e:
+        logger.error(f"Failed to send password reset email to {user.email}: {e}")
+        return False
+
+
+def send_password_reset_success_email(user, ip_address=None, user_agent=None):
+    """
+    Send confirmation email after successful password reset.
+    
+    Args:
+        user: User instance
+        ip_address: IP address from which reset was completed
+        user_agent: User agent string from reset completion
+    
+    Returns:
+        bool: True if email sent successfully, False otherwise
+    """
+    try:
+        subject = f'Password Reset Successful - {SYSTEM_NAME}'
+        
+        # Create HTML message
+        html_message = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #059669; color: white; padding: 20px; text-align: center; }}
+                .content {{ padding: 20px; background-color: #f9f9f9; }}
+                .footer {{ padding: 20px; text-align: center; font-size: 12px; color: #666; }}
+                .security-info {{ background-color: #f0fdf4; padding: 15px; border-left: 4px solid #059669; margin: 15px 0; }}
+                .warning {{ background-color: #fef2f2; padding: 15px; border-left: 4px solid #dc2626; margin: 15px 0; }}
+                .login-button {{
+                    display: inline-block;
+                    padding: 12px 30px;
+                    margin: 20px 0;
+                    background-color: #2563eb;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    font-weight: bold;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>✅ Password Reset Successful</h1>
+                </div>
+                <div class="content">
+                    <h2>Hello {user.get_full_name() or user.email},</h2>
+                    <p>Your password for {SYSTEM_NAME} has been successfully reset.</p>
+                    
+                    <div class="security-info">
+                        <strong>🔐 Security Details:</strong><br>
+                        • Password changed at: {timezone.now().strftime('%Y-%m-%d at %H:%M:%S UTC')}<br>
+                        {f"• Changed from IP: {ip_address}" if ip_address else ""}<br>
+                        • All existing sessions have been logged out<br>
+                        • You can now login with your new password
+                    </div>
+                    
+                    <div style="text-align: center;">
+                        <a href="{get_frontend_url()}/login" class="login-button">Login to Your Account</a>
+                    </div>
+                    
+                    <div class="warning">
+                        <strong>⚠️ Security Alert:</strong><br>
+                        If you didn't reset your password, your account may be compromised. 
+                        Please contact our support team immediately and change your password again.
+                    </div>
+                    
+                    <p>For your security, we recommend:</p>
+                    <ul>
+                        <li>Using a strong, unique password</li>
+                        <li>Enabling two-factor authentication if available</li>
+                        <li>Regularly updating your password</li>
+                        <li>Not sharing your login credentials</li>
+                    </ul>
+                </div>
+                <div class="footer">
+                    <p>&copy; {YEAR} {SYSTEM_NAME}. All rights reserved.</p>
+                    <p>This is an automated security notification. Please do not reply.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Create plain text message as fallback
+        text_message = f"""
+        Password Reset Successful - {SYSTEM_NAME}
+        
+        Hello {user.get_full_name() or user.email},
+        
+        Your password for {SYSTEM_NAME} has been successfully reset.
+        
+        Security Details:
+        • Password changed at: {timezone.now().strftime('%Y-%m-%d at %H:%M:%S UTC')}
+        {f"• Changed from IP: {ip_address}" if ip_address else ""}
+        • All existing sessions have been logged out
+        • You can now login with your new password
+        
+        Security Alert:
+        If you didn't reset your password, your account may be compromised. 
+        Please contact our support team immediately and change your password again.
+        
+        For your security, we recommend:
+        • Using a strong, unique password
+        • Enabling two-factor authentication if available
+        • Regularly updating your password
+        • Not sharing your login credentials
+        
+        You can login at: {get_frontend_url()}/login
+        
+        {SYSTEM_NAME} Team
+        
+        This is an automated security notification. Please do not reply.
+        """
+        
+        # Send email
+        sent = send_mail(
+            subject=subject,
+            message=text_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+            html_message=html_message
+        )
+        
+        if sent:
+            logger.info(f"Password reset success notification sent to {user.email}")
+        else:
+            logger.warning(f"Password reset success notification failed to send to {user.email}")
+            
+        return bool(sent)
+        
+    except Exception as e:
+        logger.error(f"Failed to send password reset success email to {user.email}: {e}")
+        return False

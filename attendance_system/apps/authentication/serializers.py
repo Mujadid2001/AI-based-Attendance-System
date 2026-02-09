@@ -4,7 +4,7 @@ Serializers for authentication endpoints.
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
 from django.utils.translation import gettext_lazy as _
-from apps.authentication.models import LoginLog, EmailVerificationToken
+from apps.authentication.models import LoginLog, EmailVerificationToken, PasswordResetToken
 
 User = get_user_model()
 
@@ -227,4 +227,69 @@ class ResendVerificationSerializer(serializers.Serializer):
         except User.DoesNotExist as e:
             raise serializers.ValidationError(
                 _("No account found with this email address.")
+            ) from e
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    """Serializer for password reset request."""
+    
+    email = serializers.EmailField(required=True)
+    
+    def validate_email(self, value):
+        """Validate email exists and account is active."""
+        try:
+            user = User.objects.get(email=value)
+            if not user.is_active:
+                raise serializers.ValidationError(
+                    _("This account is deactivated. Please contact support.")
+                )
+            return user
+        except User.DoesNotExist as e:
+            # Don't reveal if email exists for security
+            # Return the email to maintain same response structure
+            return value
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """Serializer for password reset confirmation."""
+    
+    token = serializers.UUIDField(required=True)
+    new_password = serializers.CharField(
+        min_length=8,
+        write_only=True,
+        style={'input_type': 'password'}
+    )
+    new_password_confirm = serializers.CharField(
+        min_length=8,
+        write_only=True,
+        style={'input_type': 'password'}
+    )
+    
+    def validate(self, data):
+        """Validate passwords match."""
+        if data['new_password'] != data['new_password_confirm']:
+            raise serializers.ValidationError(
+                _("Passwords don't match.")
+            )
+        return data
+    
+    def validate_token(self, value):
+        """Validate password reset token."""
+        try:
+            token = PasswordResetToken.objects.get(token=value)
+            
+            if token.is_used:
+                raise serializers.ValidationError(
+                    _("This password reset link has already been used.")
+                )
+            
+            if token.is_expired():
+                raise serializers.ValidationError(
+                    _("This password reset link has expired. Please request a new one.")
+                )
+            
+            return token
+        except PasswordResetToken.DoesNotExist as e:
+            raise serializers.ValidationError(
+                _("Invalid password reset token.")
             ) from e

@@ -42,7 +42,7 @@ class FacialRecognitionPipeline:
     3. Distance-based matching with ambiguity detection
     """
     
-    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.35, storage=None, enable_quality_checks=True, enable_fallback=True):
+    def __init__(self, face_detector=None, face_recognizer=None, confidence_threshold=0.30, storage=None, enable_quality_checks=True, enable_fallback=True):
         """Initialize pipeline with accurate model hierarchy and fallback support.
         
         Args:
@@ -112,7 +112,82 @@ class FacialRecognitionPipeline:
             return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         return image
 
-    def _extract_face_encoding(self, image, check_quality=True):
+    def _apply_gamma_correction(self, image, gamma=1.0):
+        """Apply gamma correction to image."""
+        if not HAS_NUMPY:
+            return image
+        try:
+            corrected = np.power(image / 255.0, 1.0 / gamma)
+            return (corrected * 255).astype(np.uint8)
+        except Exception as e:
+            logger.error(f"Error applying gamma correction: {e}")
+            return image
+    
+    def _apply_histogram_equalization(self, image):
+        """Apply histogram equalization to improve contrast."""
+        if not HAS_CV2:
+            return image
+        try:
+            if len(image.shape) == 3:
+                # Convert to YUV and equalize Y channel
+                yuv = cv2.cvtColor(image, cv2.COLOR_BGR2YUV)
+                yuv[:,:,0] = cv2.equalizeHist(yuv[:,:,0])
+                return cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR)
+            else:
+                return cv2.equalizeHist(image)
+        except Exception as e:
+            logger.error(f"Error applying histogram equalization: {e}")
+            return image
+    
+    def _emergency_enhancement(self, image):
+        """Apply aggressive enhancement for emergency registration attempts."""
+        if not HAS_CV2:
+            return image
+        try:
+            # Apply multiple enhancement techniques aggressively
+            enhanced = image.copy()
+            
+            # 1. Bilateral filter for noise reduction
+            enhanced = cv2.bilateralFilter(enhanced, 9, 80, 80)
+            
+            # 2. CLAHE (Contrast Limited Adaptive Histogram Equalization) 
+            if len(enhanced.shape) == 3:
+                lab = cv2.cvtColor(enhanced, cv2.COLOR_BGR2LAB)
+                l, a, b = cv2.split(lab)
+                clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+                l = clahe.apply(l)
+                enhanced = cv2.merge([l, a, b])
+                enhanced = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
+            else:
+                clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+                enhanced = clahe.apply(enhanced)
+            
+            # 3. Unsharp masking for edge enhancement
+            gaussian = cv2.GaussianBlur(enhanced, (0, 0), 2.0)
+            enhanced = cv2.addWeighted(enhanced, 1.5, gaussian, -0.5, 0)
+            
+            # 4. Gamma correction based on brightness
+            gray = cv2.cvtColor(enhanced, cv2.COLOR_BGR2GRAY) if len(enhanced.shape) == 3 else enhanced
+            mean_brightness = np.mean(gray)
+            
+            if mean_brightness < 80:  # Dark image
+                gamma = 0.6
+            elif mean_brightness > 180:  # Bright image  
+                gamma = 1.4
+            else:
+                gamma = 1.0
+                
+            if gamma != 1.0:
+                enhanced = np.power(enhanced / 255.0, 1.0 / gamma)
+                enhanced = (enhanced * 255).astype(np.uint8)
+            
+            return enhanced
+            
+        except Exception as e:
+            logger.error(f"Error in emergency enhancement: {e}")
+            return image
+
+    def _extract_face_encoding(self, image, check_quality=True, adaptive_quality=False):
         """Extract face encoding from image with fallback detection methods.
         
         Uses cascading fallback approach:
@@ -191,7 +266,7 @@ class FacialRecognitionPipeline:
             
             # Perform quality checks if enabled
             if check_quality and self.enable_quality_checks:
-                quality_results = FaceQualityChecker.check_all(image, face_location)
+                quality_results = FaceQualityChecker.check_all(image, face_location, adaptive=adaptive_quality)
                 if not quality_results['overall_pass']:
                     error_msg = "Image quality issues: " + "; ".join(quality_results['messages'])
                     return None, error_msg, face_location, detection_result
@@ -249,13 +324,14 @@ class FacialRecognitionPipeline:
             logger.error(f"Error extracting face encoding: {e}")
             return None, str(e), None, None
 
-    def register_face(self, image, student_id: str, check_quality=True):
-        """Register face for a student with quality validation.
+    def register_face(self, image, student_id: str, check_quality=True, max_attempts=6):
+        """Register face for a student with enhanced environment-adaptive processing.
         
         Args:
             image: Input image
             student_id: Student identifier
             check_quality: Whether to perform quality checks
+            max_attempts: Maximum registration attempts with different processing
             
         Returns:
             Tuple of (success, encoding, message, metadata)
@@ -263,22 +339,125 @@ class FacialRecognitionPipeline:
         if not HAS_FACE_RECOGNITION:
             return False, None, "Face recognition library not available", None
         
-        try:
-            encoding, error_msg, face_location, metadata = self._extract_face_encoding(image, check_quality)
-            if error_msg:
-                return False, None, error_msg, metadata
+        # Environment-adaptive processing methods
+        processing_methods = [
+            ("original", lambda img: img),
+            ("enhanced", lambda img: FaceQualityChecker.enhance_image(img)),
+            ("gamma_light", lambda img: self._apply_gamma_correction(img, 0.7)),
+            ("gamma_dark", lambda img: self._apply_gamma_correction(img, 1.3)),
+            ("histogram_equalized", lambda img: self._apply_histogram_equalization(img)),
+            ("emergency", lambda img: self._emergency_enhancement(img))
+        ]
+        
+        best_result = None
+        best_quality_score = -1
+        last_error = None
+        attempts_log = []
+        
+        for attempt, (method_name, process_func) in enumerate(processing_methods[:max_attempts]):
+            try:
+                logger.info(f"Registration attempt {attempt + 1}/{max_attempts} using {method_name} processing")
+                
+                # Apply processing method
+                processed_image = process_func(image.copy())
+                
+                # Environment-adaptive quality assessment
+                if check_quality:
+                    try:
+                        environment = FaceQualityChecker.detect_environment(processed_image)
+                    except Exception as e:
+                        logger.warning(f"Environment detection failed: {e}, using default")
+                        environment = "unknown"
+                    quality_results = FaceQualityChecker.check_all(processed_image, None, adaptive=True)
+                    
+                    # Progressively lower standards for later attempts
+                    quality_threshold = 3 - (attempt * 0.5)  # Start at 3, go down to 0.5
+                    quality_score = sum(1 for check in quality_results['checks'].values() if check['pass'])
+                    
+                    # For emergency attempts, accept almost anything with a face
+                    if attempt >= 4:
+                        check_quality = False  # Skip quality for emergency attempts
+                        logger.info(f"Emergency mode - skipping quality checks for attempt {attempt + 1}")
+                else:
+                    quality_score = 5  # Assume good quality when not checking
+                
+                # Extract face encoding with increasingly lenient checks
+                adaptive_quality = check_quality and attempt < 4  # Only check quality for first 4 attempts
+                encoding, error_msg, face_location, metadata = self._extract_face_encoding(
+                    processed_image, 
+                    check_quality=adaptive_quality, 
+                    adaptive_quality=True
+                )
+                
+                attempt_info = {
+                    'method': method_name,
+                    'quality_score': quality_score,
+                    'error': error_msg,
+                    'face_detected': face_location is not None
+                }
+                attempts_log.append(attempt_info)
+                
+                if error_msg:
+                    last_error = f"{method_name}: {error_msg}"
+                    logger.warning(f"Attempt {attempt + 1} failed: {last_error}")
+                    
+                    # For emergency attempts, try with minimal requirements
+                    if attempt >= 4 and "No face" not in error_msg:
+                        # Try to proceed even with quality issues
+                        logger.info(f"Emergency retry for attempt {attempt + 1} with minimal requirements")
+                        encoding, error_msg, face_location, metadata = self._extract_face_encoding(
+                            processed_image, 
+                            check_quality=False,  # No quality check
+                            adaptive_quality=False
+                        )
+                        
+                        if not error_msg and encoding is not None:
+                            logger.info(f"Emergency retry succeeded for attempt {attempt + 1}")
+                            quality_score = 1  # Minimal but acceptable
+                        else:
+                            continue
+                    else:
+                        continue
+                
+                # Track best result
+                if quality_score > best_quality_score or (best_result is None and encoding is not None):
+                    best_quality_score = quality_score
+                    best_result = (encoding, face_location, metadata, method_name, processed_image, attempt + 1)
+                    
+                    # Accept immediately if we get decent quality
+                    if quality_score >= 3 or (attempt >= 3 and quality_score >= 1):
+                        break
             
-            # Generate augmentations for robustness
-            from .utils import DataAugmentation
-            augmentations = DataAugmentation.generate_augmentations(image, num_augmentations=2)
+            except Exception as e:
+                last_error = f"{method_name}: {str(e)}"
+                logger.error(f"Registration attempt {attempt + 1} error: {last_error}")
+                attempts_log.append({
+                    'method': method_name,
+                    'quality_score': -1,
+                    'error': str(e),
+                    'face_detected': False
+                })
+                continue
+        
+        # Use best result if we found one
+        if best_result:
+            encoding, face_location, metadata, method_name, processed_image, attempt_used = best_result
             
-            encodings = [encoding]  # Start with original
+            # Generate augmentations for robustness only if we have good quality
+            encodings = [encoding]  # Start with best encoding
             
-            # Extract encodings from augmentations
-            for aug_image in augmentations:
-                aug_encoding, _, _, _ = self._extract_face_encoding(aug_image, check_quality=False)
-                if aug_encoding is not None:
-                    encodings.append(aug_encoding)
+            # Only augment if quality is reasonable to avoid making bad encodings worse
+            if best_quality_score >= 2:
+                try:
+                    from .utils import DataAugmentation
+                    augmentations = DataAugmentation.generate_augmentations(processed_image, num_augmentations=2)
+                    
+                    for aug_image in augmentations:
+                        aug_encoding, _, _, _ = self._extract_face_encoding(aug_image, check_quality=False)
+                        if aug_encoding is not None:
+                            encodings.append(aug_encoding)
+                except Exception as e:
+                    logger.warning(f"Augmentation failed: {e}")
             
             # Average encodings for better robustness
             if len(encodings) > 1:
@@ -289,17 +468,46 @@ class FacialRecognitionPipeline:
             else:
                 final_encoding = encoding
             
-            # Store averaged encoding
+            # Store encoding
             self.storage.add_encoding(student_id, final_encoding)
             
-            success_msg = f"Face registered successfully using {metadata.get('method_used', 'unknown')} detection"
-            if 'encoding_model' in metadata:
-                success_msg += f" and {metadata['encoding_model']} encoding model"
+            # Success message with environment awareness
+            try:
+                environment = FaceQualityChecker.detect_environment(processed_image)
+            except Exception:
+                environment = "unknown"
+            success_msg = f"Face registered using {method_name} processing (attempt {attempt_used})"
+            if environment != "unknown":
+                success_msg += f" in {environment} environment"
+            if len(encodings) > 1:
+                success_msg += f" with {len(encodings)} encodings averaged"
             
-            return True, final_encoding, success_msg, metadata
-        except Exception as e:
-            logger.error(f"Error registering face: {e}")
-            return False, None, f"Error: {str(e)}", None
+            enhanced_metadata = metadata.copy() if metadata else {}
+            enhanced_metadata.update({
+                'processing_method': method_name,
+                'attempt_used': attempt_used,
+                'quality_score': best_quality_score,
+                'environment': environment,
+                'encodings_averaged': len(encodings),
+                'attempts_log': attempts_log,
+                'emergency_mode': attempt_used >= 5
+            })
+            
+            logger.info(f"Registration successful: {success_msg}")
+            return True, final_encoding, success_msg, enhanced_metadata
+        else:
+            # All attempts failed
+            error_msg = f"Registration failed after {max_attempts} attempts"
+            if last_error:
+                error_msg += f". Last error: {last_error}"
+            
+            failure_metadata = {
+                'attempts_log': attempts_log,
+                'total_attempts': max_attempts
+            }
+            
+            logger.error(error_msg)
+            return False, None, error_msg, failure_metadata
     
     def load_training_data(self, path: str):
         """Load training data from file."""
@@ -349,23 +557,33 @@ class FacialRecognitionPipeline:
             known_encodings_list = []
             valid_ids = []
             
-            # Validate and filter encodings
+            # Get the dimension of the current encoding to compare
+            encoding_dim = encoding.shape[0]
+            logger.info(f"Query encoding dimension: {encoding_dim}")
+            
+            # Validate and filter encodings - only include encodings with matching dimension
             for sid in all_ids:
                 enc = self.storage.get_encoding(sid)
-                if enc is not None and isinstance(enc, np.ndarray) and enc.shape == (128,):
-                    known_encodings_list.append(enc)
-                    valid_ids.append(sid)
+                if enc is not None and isinstance(enc, np.ndarray):
+                    if enc.shape == (encoding_dim,):
+                        # Only add encodings with same dimension as query
+                        known_encodings_list.append(enc)
+                        valid_ids.append(sid)
+                    else:
+                        logger.warning(f"Skipping student {sid}: dimension mismatch (has {enc.shape[0]}, need {encoding_dim})")
                 else:
                     logger.warning(f"Invalid encoding for student {sid}: type={type(enc)}, shape={enc.shape if hasattr(enc, 'shape') else 'N/A'}")
             
             if len(known_encodings_list) == 0:
                 return {
                     'success': False,
-                    'error': 'No valid encodings to compare against',
+                    'error': f'No valid {encoding_dim}-dimensional encodings to compare against',
                     'face_detected': True,
                     'confidence': 0.0,
                     'detection_metadata': metadata
                 }
+            
+            logger.info(f"Comparing against {len(known_encodings_list)} encodings with dimension {encoding_dim}")
             
             # Convert to numpy array for face_recognition library
             known_encodings_array = np.array(known_encodings_list)

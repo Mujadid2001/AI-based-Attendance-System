@@ -2,13 +2,17 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'url'
 import { dirname, resolve } from 'path'
+import mkcert from 'vite-plugin-mkcert'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    mkcert()
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
@@ -23,6 +27,7 @@ export default defineConfig({
     },
   },
   server: {
+    https: true,
     port: 3000,
     // No proxy - frontend is completely decoupled from backend
     // Configure API URL via environment variable VITE_API_URL
@@ -44,6 +49,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
   },
   preview: {
+    https: true,
     port: 3000,
   },
 })

@@ -101,13 +101,14 @@ class AIServiceManager:
         self._ensure_voice_initialized()
         return self._voice_notifier
     
-    def register_student_face(self, image_file, student: StudentProfile) -> dict:
+    def register_student_face(self, image_file, student: StudentProfile, max_attempts=6) -> dict:
         """
-        Register student face and update training data.
+        Register student face with enhanced processing and multiple attempts.
         
         Args:
             image_file: Django uploaded file
             student: StudentProfile instance
+            max_attempts: Maximum registration attempts (default 6 for environment-adaptive processing)
         
         Returns:
             dict with registration status and details
@@ -115,7 +116,9 @@ class AIServiceManager:
         result = {
             'success': False,
             'message': '',
-            'encoding': None
+            'encoding': None,
+            'attempts_made': 0,
+            'processing_method': None
         }
         
         try:
@@ -129,11 +132,26 @@ class AIServiceManager:
             image = Image.open(image_file)
             image_array = ImageProcessor.convert_pil_to_cv2(image)
             
-            # Register face
-            success, encoding, message = self._pipeline.register_face(
+            if image_array is None:
+                result['message'] = 'Failed to process image file'
+                return result
+            
+            # Register face with multiple attempts
+            success, encoding, message, metadata = self._pipeline.register_face(
                 image_array,
-                str(student.user.id)
+                str(student.user.id),
+                max_attempts=max_attempts
             )
+            
+            # Handle metadata safely
+            attempts_used = max_attempts
+            processing_method = 'unknown'
+            
+            if metadata and isinstance(metadata, dict):
+                attempts_used = metadata.get('attempt_used', metadata.get('attempts_made', max_attempts))
+                processing_method = metadata.get('processing_method', metadata.get('method_used', 'unknown'))
+            
+            result['attempts_made'] = attempts_used if success else max_attempts
             
             if success:
                 # Update student profile
@@ -160,12 +178,14 @@ class AIServiceManager:
                 self._pipeline.save_training_data(training_data_path)
                 
                 result['success'] = True
-                result['message'] = 'Face registered successfully'
-                result['encoding'] = encoding.tobytes()
-                
-                logger.info(f"Student face registered: {student.roll_number}")
-            else:
                 result['message'] = message
+                result['encoding'] = encoding.tobytes()
+                result['processing_method'] = processing_method
+                
+                logger.info(f"Student face registered successfully: {student.roll_number} using {processing_method} (attempt {attempts_used})")
+            else:
+                result['message'] = message or f"Registration failed after {result['attempts_made']} attempts"
+                logger.warning(f"Face registration failed for {student.roll_number}: {result['message']}")
         
         except Exception as e:
             result['message'] = f"Error registering face: {str(e)}"
@@ -221,8 +241,13 @@ class AIServiceManager:
                         'email': student.user.email
                     }
                 except StudentProfile.DoesNotExist:
+                    logger.error(f"Student profile not found for user_id={result['student_id']}")
                     result['success'] = False
-                    result['error'] = 'Student not found'
+                    result['error'] = f"Student profile not found for ID {result['student_id']}"
+                except Exception as e:
+                    logger.error(f"Error fetching student profile: {e}")
+                    result['success'] = False
+                    result['error'] = f"Error fetching student: {str(e)}"
             
             return result
         

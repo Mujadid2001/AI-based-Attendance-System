@@ -33,7 +33,7 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
         """
         Register student face.
         Only admin/teacher can register faces for students.
-        Accepts one image at a time. Call multiple times for multiple images (max 5).
+        Accepts one image for face registration.
         """
         image_file = request.FILES.get('image')
         student_id = request.data.get('student_id')
@@ -68,15 +68,6 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
                 
-            # Check maximum images limit (5 images)
-            from apps.student.models import StudentFaceImage
-            existing_images = StudentFaceImage.objects.filter(student=student).count()
-            if existing_images >= 5:
-                return Response(
-                    {'error': _('Maximum 5 face images allowed per student.')},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-                
         except StudentProfile.DoesNotExist:
             return Response(
                 {'error': _('Student not found. Please check the roll number.')},
@@ -84,21 +75,29 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
             )
         
         # Register face
-        ai_manager = get_ai_manager()
-        result = ai_manager.register_student_face(image_file, student)
-        
-        if result['success']:
+        try:
+            ai_manager = get_ai_manager()
+            result = ai_manager.register_student_face(image_file, student)
+            
+            if result['success']:
+                # Simplified success response
+                return Response(
+                    {
+                        'message': 'Face registered successfully',
+                        'images_count': StudentFaceImage.objects.filter(student=student).count()
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {'error': result['message']},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            logger.error(f"Face registration error: {e}")
             return Response(
-                {
-                    'message': result['message'],
-                    'images_count': StudentFaceImage.objects.filter(student=student).count()
-                },
-                status=status.HTTP_200_OK
-            )
-        else:
-            return Response(
-                {'error': result['message']},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': f'Face registration failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
     @action(detail=False, methods=['post'], url_path='update-face')
@@ -107,7 +106,7 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
         Update/re-register student face.
         Only admin/teacher can update faces.
         This will delete old face data and allow new registration.
-        Accepts one image at a time. Call multiple times for multiple images (max 5).
+        Accepts one image for face update.
         """
         image_file = request.FILES.get('image')
         student_id = request.data.get('student_id')
@@ -152,14 +151,6 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
                 student.save()
                 
                 logger.info(f"Cleared existing face data for student: {student.roll_number}")
-            else:
-                # Check maximum images limit (5 images)
-                existing_images_count = StudentFaceImage.objects.filter(student=student).count()
-                if existing_images_count >= 5:
-                    return Response(
-                        {'error': _('Maximum 5 face images allowed. Set clear_existing=true to start fresh.')},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
                 
         except StudentProfile.DoesNotExist:
             return Response(

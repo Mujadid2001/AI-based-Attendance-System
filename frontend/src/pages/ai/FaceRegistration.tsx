@@ -7,7 +7,7 @@ import { aiService } from '@services/index'
 import toast from 'react-hot-toast'
 import Webcam from 'react-webcam'
 
-const MAX_IMAGES = 5
+const MAX_IMAGES = 1
 
 const FaceRegistration = () => {
   const location = useLocation()
@@ -31,7 +31,7 @@ const FaceRegistration = () => {
     }
   }, [prefilledRollNumber])
 
-  // Draw face guide overlay
+  // Draw face guide overlay with enhanced guidance
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -42,24 +42,54 @@ const FaceRegistration = () => {
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // Draw oval guide
+    // Draw enhanced face guides
     const centerX = canvas.width / 2
-    const centerY = canvas.height / 2
-    const radiusX = canvas.width * 0.25
+    const centerY = canvas.height / 2.2  // Slightly higher for better positioning
+    const radiusX = canvas.width * 0.25   // Good size for face positioning
     const radiusY = canvas.height * 0.35
 
+    // Draw outer guide (recommended area)
     ctx.strokeStyle = '#10b981'
     ctx.lineWidth = 3
-    ctx.setLineDash([10, 5])
+    ctx.setLineDash([])
     ctx.beginPath()
     ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, 2 * Math.PI)
     ctx.stroke()
 
-    // Draw text guide
+    // Draw inner guide (optimal area)
+    ctx.strokeStyle = '#059669'
+    ctx.lineWidth = 2
+    ctx.setLineDash([5, 5])
+    ctx.beginPath()
+    ctx.ellipse(centerX, centerY, radiusX * 0.8, radiusY * 0.8, 0, 0, 2 * Math.PI)
+    ctx.stroke()
+
+    // Draw guidelines for facial feature positioning
+    ctx.strokeStyle = '#10b981'
+    ctx.lineWidth = 1
+    ctx.setLineDash([3, 3])
+    
+    // Eye level line
+    ctx.beginPath()
+    ctx.moveTo(centerX - radiusX * 0.6, centerY - radiusY * 0.3)
+    ctx.lineTo(centerX + radiusX * 0.6, centerY - radiusY * 0.3)
+    ctx.stroke()
+    
+    // Nose level line  
+    ctx.beginPath()
+    ctx.moveTo(centerX - radiusX * 0.4, centerY)
+    ctx.lineTo(centerX + radiusX * 0.4, centerY)
+    ctx.stroke()
+
+    // Enhanced instruction text
     ctx.fillStyle = '#10b981'
-    ctx.font = 'bold 18px sans-serif'
+    ctx.font = 'bold 16px sans-serif'
     ctx.textAlign = 'center'
-    ctx.fillText('Position your face within this guide', centerX, 40)
+    ctx.fillText('Position your face in the green guides', centerX, 25)
+    
+    ctx.font = '12px sans-serif'
+    ctx.fillStyle = '#059669'
+    ctx.fillText('Keep eyes on top line, ensure good lighting', centerX, 45)
   }, [])
 
   const captureImage = useCallback(() => {
@@ -71,7 +101,15 @@ const FaceRegistration = () => {
     const imageSrc = webcamRef.current?.getScreenshot()
     if (imageSrc) {
       setCapturedImages((prev) => [...prev, imageSrc])
-      toast.success(`Image ${capturedImages.length + 1} of ${MAX_IMAGES} captured`)
+      
+      const nextImageCount = capturedImages.length + 1
+      if (nextImageCount === 1) {
+        toast.success('First image captured! Take 2-4 more from different angles')
+      } else if (nextImageCount >= 3) {
+        toast.success(`${nextImageCount} images captured - Ready to register!`)
+      }
+    } else {
+      toast.error('Capture failed - Check lighting and try again')
     }
   }, [capturedImages.length])
 
@@ -118,18 +156,13 @@ const FaceRegistration = () => {
       return
     }
 
-    if (capturedImages.length < 3) {
-      toast.error('Please capture at least 3 images for better accuracy')
-      return
-    }
-
-    if (capturedImages.length > MAX_IMAGES) {
-      toast.error(`Maximum ${MAX_IMAGES} images allowed`)
+    if (capturedImages.length < 1) {
+      toast.error('Please capture one image')
       return
     }
 
     setIsProcessing(true)
-    const loadingToast = toast.loading(`Processing ${capturedImages.length} images... This may take a minute.`)
+    const loadingToast = toast.loading('Processing images... This may take a moment')
 
     try {
       // Convert base64 images to files
@@ -140,34 +173,53 @@ const FaceRegistration = () => {
         })
       )
 
-      // Use update or register based on mode
-      if (isUpdate) {
-        await aiService.updateFace(studentId, files)
-        toast.success('Face updated successfully!', { id: loadingToast })
+      let successCount = 0
+      let lastError: string | null = null
+      
+      // Process images with minimal notifications
+      for (let i = 0; i < files.length; i++) {
+        try {
+          if (isUpdate) {
+            await aiService.updateFace(studentId, [files[i]])
+          } else {
+            await aiService.registerFace(studentId, [files[i]])
+          }
+          successCount++
+          
+          // Only show success for first image
+          if (i === 0) {
+            toast.dismiss(loadingToast)
+            toast.loading('Processing additional images for better accuracy...')
+          }
+          
+        } catch (error: any) {
+          lastError = error.response?.data?.error || error.message || `Image ${i + 1} failed`
+          
+          // Continue processing remaining images if first succeeds
+          if (successCount === 0 && i === 0 && files.length > 1) {
+            continue
+          }
+        }
+      }
+
+      toast.dismiss()
+      
+      if (successCount > 0) {
+        toast.success(`Face ${isUpdate ? 'updated' : 'registered'} successfully! (${successCount}/${files.length} images processed)`)
+        setStudentId('')
+        setCapturedImages([])
+        
+        if (prefilledRollNumber) {
+          setTimeout(() => navigate(-1), 1000)
+        }
       } else {
-        await aiService.registerFace(studentId, files)
-        toast.success('Face registered successfully!', { id: loadingToast })
+        toast.error(`Registration failed: ${lastError}. Please try again with better lighting conditions.`)
       }
-      
-      // Reset form
-      setStudentId('')
-      setCapturedImages([])
-      
-      // Navigate back if came from student detail
-      if (prefilledRollNumber) {
-        setTimeout(() => navigate(-1), 1500)
-      }
+
     } catch (error: any) {
-      console.error('Face registration error:', error)
-      toast.dismiss(loadingToast)
-      
-      // Check for timeout error
-      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        toast.error('Request timeout. Please try with fewer images or check your connection.')
-      } else {
-        const errorMsg = error.response?.data?.error || error.response?.data?.message || 'Registration failed'
-        toast.error(errorMsg)
-      }
+      toast.dismiss()
+      const errorMsg = error.response?.data?.error || error.message || 'Registration failed'
+      toast.error(`Error: ${errorMsg}`)
     } finally {
       setIsProcessing(false)
     }
@@ -281,10 +333,10 @@ const FaceRegistration = () => {
                 {capturedImages.length}/{MAX_IMAGES}
               </div>
               <p className="text-sm text-gray-600 mt-1">
-                {capturedImages.length < 3 
-                  ? `Minimum 3 images required (${3 - capturedImages.length} more needed)`
+                {capturedImages.length < 1 
+                  ? 'Capture one image to proceed'
                   : capturedImages.length >= MAX_IMAGES
-                  ? 'Maximum images reached'
+                  ? 'Image captured - ready to register'
                   : 'Ready to register'}
               </p>
             </div>
@@ -294,7 +346,7 @@ const FaceRegistration = () => {
               isLoading={isProcessing}
               fullWidth
               size="lg"
-              disabled={capturedImages.length < 3 || capturedImages.length > MAX_IMAGES || !studentId}
+              disabled={capturedImages.length < 1 || capturedImages.length > MAX_IMAGES || !studentId}
             >
               <IoCheckmark className="w-5 h-5 mr-2" />
               {isUpdate ? 'Update Face' : 'Register Face'}
@@ -335,35 +387,30 @@ const FaceRegistration = () => {
         </Card>
       )}
 
-      {/* Instructions */}
+      {/* Simplified Instructions */}
       <Card>
-        <h2 className="text-xl font-semibold mb-4">Instructions</h2>
-        <ul className="space-y-2 text-gray-600">
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">1.</span>
-            <span>Enter the roll number in the form</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">2.</span>
-            <span>Position your face within the green guide overlay on the camera</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">3.</span>
-            <span>Capture 3-5 images from different angles (straight, slight left, slight right)</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">4.</span>
-            <span>Ensure good lighting and clear face visibility without glasses or masks</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">5.</span>
-            <span>Click "{isUpdate ? 'Update Face' : 'Register Face'}" when you have captured 3-5 quality images</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-primary-600 font-bold">6.</span>
-            <span>Maximum {MAX_IMAGES} images allowed per registration</span>
-          </li>
-        </ul>
+        <h2 className="text-xl font-semibold mb-4">📋 Quick Guide</h2>
+        <div className="space-y-3">
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="font-semibold text-blue-800 mb-2">How to Register:</h3>
+            <ol className="text-blue-700 space-y-1">
+              <li><strong>1.</strong> Enter roll number</li>
+              <li><strong>2.</strong> Position face in green guide</li>
+              <li><strong>3.</strong> Take one clear photo</li>
+              <li><strong>4.</strong> Click register when done</li>
+            </ol>
+          </div>
+          
+          <div className="bg-green-50 p-3 rounded-lg">
+            <h4 className="font-semibold text-green-800 mb-1">✅ Tips for Success:</h4>
+            <ul className="text-green-700 text-sm space-y-1">
+              <li>• Ensure good lighting on your face</li>
+              <li>• Look directly at camera</li>
+              <li>• Remove glasses/masks if possible</li>
+              <li>• System adapts to different conditions automatically</li>
+            </ul>
+          </div>
+        </div>
       </Card>
     </div>
   )

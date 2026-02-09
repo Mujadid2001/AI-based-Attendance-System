@@ -202,3 +202,64 @@ class EmailVerificationToken(models.Model):
     def is_valid(self):
         """Check if token is valid (not used and not expired)."""
         return not self.is_used and not self.is_expired()
+
+
+class PasswordResetToken(models.Model):
+    """Password reset tokens for password recovery."""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='password_reset_tokens'
+    )
+    token = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        help_text=_('Unique password reset token')
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(
+        help_text=_('Token expiration time')
+    )
+    is_used = models.BooleanField(
+        default=False,
+        help_text=_('Whether the token has been used')
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        help_text=_('IP address from which reset was requested')
+    )
+    user_agent = models.TextField(
+        blank=True,
+        help_text=_('User agent string from reset request')
+    )
+    
+    class Meta:
+        verbose_name = _('Password Reset Token')
+        verbose_name_plural = _('Password Reset Tokens')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['token']),
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['-created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} - Password Reset - {self.created_at}"
+    
+    def save(self, *args, **kwargs):
+        """Set expiration time on creation."""
+        if not self.expires_at:
+            # Password reset tokens expire in 1 hour for security
+            self.expires_at = timezone.now() + timedelta(hours=1)
+        super().save(*args, **kwargs)
+    
+    def is_expired(self):
+        """Check if token is expired."""
+        return timezone.now() > self.expires_at
+    
+    def is_valid(self):
+        """Check if token is valid (not used and not expired)."""
+        return not self.is_used and not self.is_expired()

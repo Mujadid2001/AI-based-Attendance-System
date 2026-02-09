@@ -6,7 +6,7 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.html import format_html
 from django.urls import reverse
 from django.utils.safestring import mark_safe
-from apps.authentication.models import User, LoginLog, EmailVerificationToken
+from apps.authentication.models import User, LoginLog, EmailVerificationToken, PasswordResetToken
 
 
 class PendingTeacherFilter(admin.SimpleListFilter):
@@ -276,6 +276,42 @@ class EmailVerificationTokenAdmin(admin.ModelAdmin):
     search_fields = ('user__email', 'token')
     readonly_fields = ('user', 'token', 'created_at', 'expires_at', 'is_used')
     ordering = ('-created_at',)
+    
+    def is_expired_status(self, obj):
+        """Display expiration status."""
+        return obj.is_expired()
+    is_expired_status.short_description = 'Is Expired'
+    is_expired_status.boolean = True
+    
+    def has_add_permission(self, request):
+        """Prevent manual addition of tokens."""
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        """Allow deletion of old tokens."""
+        return True
+
+
+@admin.register(PasswordResetToken)
+class PasswordResetTokenAdmin(admin.ModelAdmin):
+    """Admin interface for Password Reset Token model."""
+    
+    list_display = (
+        'user', 'token_short', 'created_at', 'expires_at', 
+        'is_used', 'is_expired_status', 'ip_address'
+    )
+    list_filter = (
+        'is_used', 'created_at', 'expires_at'
+    )
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'ip_address')
+    readonly_fields = ('token', 'user', 'created_at', 'expires_at', 'ip_address', 'user_agent')
+    ordering = ('-created_at',)
+    
+    def token_short(self, obj):
+        """Display shortened token for readability."""
+        token_str = str(obj.token)
+        return f"{token_str[:8]}...{token_str[-8:]}"
+    token_short.short_description = 'Token'
     
     def is_expired_status(self, obj):
         """Display expiration status."""
