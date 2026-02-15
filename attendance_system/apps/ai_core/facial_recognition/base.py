@@ -1,7 +1,6 @@
 """Abstract base classes for facial recognition components using Strategy Pattern."""
 from abc import ABC, abstractmethod
 
-
 class FaceDetector(ABC):
     """Abstract base class for face detection."""
     

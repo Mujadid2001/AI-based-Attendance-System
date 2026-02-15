@@ -16,7 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils.translation import gettext_lazy as _
 from apps.ai_core.services import get_ai_manager
 from apps.authentication.permissions import IsAdminOrTeacher, IsStudent
-from apps.student.models import StudentProfile
+from apps.student.models import StudentProfile, StudentFaceImage
 from apps.attendance.models import Attendance, AttendanceSession
 from django.utils import timezone
 
@@ -74,6 +74,24 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        # Check for duplicate faces before registering
+        try:
+            ai_manager = get_ai_manager()
+            
+            # Check if this face is already registered for another student
+            duplicate_check = ai_manager.check_face_duplicate(image_file, student.roll_number)
+            if duplicate_check['is_duplicate']:
+                return Response(
+                    {
+                        'error': f'This face is already registered for another student: {duplicate_check["existing_student"]}. Each face can only be registered once.'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+        except Exception as duplicate_error:
+            logger.warning(f"Duplicate check failed: {duplicate_error}. Proceeding with registration.")
+            # Continue with registration even if duplicate check fails
+            
         # Register face
         try:
             ai_manager = get_ai_manager()
@@ -135,9 +153,6 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
             # student_id is actually the roll_number from frontend
             student = StudentProfile.objects.get(roll_number=student_id)
             
-            from apps.student.models import StudentFaceImage
-            from django.utils import timezone
-            
             # Only clear if explicitly requested
             if clear_existing:
                 existing_images = StudentFaceImage.objects.filter(student=student)
@@ -158,8 +173,24 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Register/update face
-        ai_manager = get_ai_manager()
+        # Check for duplicate faces before updating (unless it's the same student)
+        try:
+            ai_manager = get_ai_manager()
+            
+            # Check if this face is already registered for another student
+            duplicate_check = ai_manager.check_face_duplicate(image_file, student.roll_number)
+            if duplicate_check['is_duplicate']:
+                return Response(
+                    {
+                        'error': f'This face is already registered for another student: {duplicate_check["existing_student"]}. Each face can only be registered once.'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+        except Exception as duplicate_error:
+            logger.warning(f"Duplicate check failed: {duplicate_error}. Proceeding with update.")
+            # Continue with update even if duplicate check fails
+        
         result = ai_manager.register_student_face(image_file, student)
         
         if result['success']:
@@ -175,6 +206,102 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
             return Response(
                 {'error': result['message']},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=False, methods=['post'], url_path='check-duplicate')
+    def check_duplicate(self, request):
+        """
+        Check if a face is already registered for another student.
+        This is a test/debug endpoint.
+        """
+        image_file = request.FILES.get('image')
+        student_id = request.data.get('student_id', '')
+        
+        if not image_file:
+            return Response(
+                {'error': _('Image file is required.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            ai_manager = get_ai_manager()
+            duplicate_check = ai_manager.check_face_duplicate(image_file, student_id)
+            
+            return Response({
+                'is_duplicate': duplicate_check['is_duplicate'],
+                'existing_student': duplicate_check.get('existing_student'),
+                'confidence': duplicate_check.get('confidence', 0.0),
+                'message': f"Face {'is' if duplicate_check['is_duplicate'] else 'is not'} a duplicate"
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Duplicate check error: {e}")
+            return Response(
+                {'error': f'Duplicate check failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'], url_path='find-duplicates')
+    def find_duplicates(self, request):
+        """
+        Find existing duplicate face registrations in the system.
+        This is an admin utility to clean up existing duplicates.
+        """
+        try:
+            ai_manager = get_ai_manager()
+            duplicates = []
+            
+            # Get all registered students
+            registered_students = StudentProfile.objects.filter(
+                is_face_registered=True,
+                face_embedding__isnull=False
+            ).order_by('id')
+            
+            checked_pairs = set()
+            
+            for i, student1 in enumerate(registered_students):
+                for student2 in registered_students[i+1:]:
+                    # Skip if we've already checked this pair
+                    pair_key = tuple(sorted([student1.roll_number, student2.roll_number]))
+                    if pair_key in checked_pairs:
+                        continue
+                    checked_pairs.add(pair_key)
+                    
+                    encoding1 = student1.get_face_embedding()
+                    encoding2 = student2.get_face_embedding()
+                    
+                    if encoding1 is not None and encoding2 is not None:
+                        try:
+                            import face_recognition
+                            
+                            # Use sensitive tolerance for duplicate detection
+                            tolerance = 0.5
+                            matches = face_recognition.compare_faces([encoding1], encoding2, tolerance=tolerance)
+                            distance = face_recognition.face_distance([encoding1], encoding2)[0]
+                            confidence = 1 - distance
+                            
+                            if len(matches) > 0 and matches[0]:
+                                duplicates.append({
+                                    'student1': student1.roll_number,
+                                    'student2': student2.roll_number,
+                                    'confidence': confidence,
+                                    'distance': distance
+                                })
+                                
+                        except Exception as e:
+                            logger.error(f"Error comparing {student1.roll_number} vs {student2.roll_number}: {e}")
+            
+            return Response({
+                'duplicates_found': len(duplicates),
+                'duplicates': duplicates,
+                'message': f'Found {len(duplicates)} duplicate face registrations'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Find duplicates error: {e}")
+            return Response(
+                {'error': f'Find duplicates failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
 

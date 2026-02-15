@@ -64,14 +64,15 @@ class FallbackDetectionManager:
         # Initialize detectors lazily
         self._detectors = {}
         
-        # Define detection method order (most accurate first)
+        # Define detection method order (fastest first, then fallback to more accurate but slower)
+        # Priority: Speed first, then accuracy
         self.detection_order = [
-            DetectionMethod.CNN,
-            DetectionMethod.DNN_SSD,
-            DetectionMethod.MTCNN,
-            DetectionMethod.DLIB,
-            DetectionMethod.HOG,
-            DetectionMethod.HAAR_CASCADE,
+            DetectionMethod.HOG,            # Fastest - CPU friendly
+            DetectionMethod.HAAR_CASCADE,   # Very fast - traditional OpenCV
+            DetectionMethod.DLIB,          # Balanced speed/accuracy
+            DetectionMethod.DNN_SSD,       # Good accuracy, moderate speed  
+            DetectionMethod.CNN,           # Most accurate but slower
+            DetectionMethod.MTCNN,         # Slowest but handles difficult cases
         ]
         
         logger.info("Fallback detection manager initialized")
@@ -171,13 +172,14 @@ class FallbackDetectionManager:
             return image
     
     def detect_faces_with_fallback(self, image, methods: Optional[List[DetectionMethod]] = None) -> Dict[str, Any]:
-        """Detect faces using cascading fallback methods.
+        """Detect faces using cascading fallback methods - SPEED OPTIMIZED.
         
-        Tries each detection method in order of accuracy until a face is found.
+        Tries each detection method in order of SPEED (fastest first), stopping immediately
+        when a face is successfully detected to minimize processing time.
         
         Args:
             image: Input image (BGR or RGB)
-            methods: Optional list of methods to try (defaults to all in order)
+            methods: Optional list of methods to try (defaults to speed-optimized order)
             
         Returns:
             Dict containing:
@@ -191,14 +193,27 @@ class FallbackDetectionManager:
             methods = self.detection_order
         
         rgb_image = self._convert_to_rgb(image)
-        enhanced_image = self._apply_image_enhancements(rgb_image)
         
         attempts = []
         last_error = None
         
-        for method in methods:
+        # Try fast methods first with original image (no enhancement for speed)
+        fast_methods = [DetectionMethod.HOG, DetectionMethod.HAAR_CASCADE]
+        enhanced_image = None  # Only enhance when needed
+        
+        for i, method in enumerate(methods):
             self.detection_stats[method]['attempts'] += 1
             attempts.append(method.value)
+            
+            # Use original image for fast methods, enhanced for slower methods
+            if method in fast_methods:
+                working_image = rgb_image
+                logger.debug(f"Using original image for fast method: {method.value}")
+            else:
+                if enhanced_image is None:
+                    enhanced_image = self._apply_image_enhancements(rgb_image)
+                    logger.debug("Applied image enhancements for accuracy-focused methods")
+                working_image = enhanced_image
             
             try:
                 logger.info(f"Attempting face detection with {method.value.upper()} method...")
@@ -210,19 +225,20 @@ class FallbackDetectionManager:
                         continue
                     
                     face_locations = face_recognition.face_locations(
-                        enhanced_image, 
+                        working_image, 
                         model=method.value
                     )
                     
                     if len(face_locations) > 0:
                         self.detection_stats[method]['successes'] += 1
-                        logger.info(f"✓ Face detected successfully using {method.value.upper()}")
+                        logger.info(f"🚀 FAST SUCCESS: Face detected using {method.value.upper()} on attempt {len(attempts)}")
                         return {
                             'success': True,
                             'face_locations': face_locations,
                             'method_used': method.value,
                             'attempts': attempts,
-                            'error': None
+                            'error': None,
+                            'detection_speed': 'fast' if len(attempts) <= 2 else 'fallback'
                         }
                     else:
                         logger.debug(f"{method.value} detected 0 faces")
@@ -235,12 +251,13 @@ class FallbackDetectionManager:
                         continue
                     
                     # Convert to BGR for OpenCV-based detectors
-                    bgr_image = cv2.cvtColor(enhanced_image, cv2.COLOR_RGB2BGR) if HAS_CV2 else enhanced_image
+                    bgr_image = cv2.cvtColor(working_image, cv2.COLOR_RGB2BGR) if HAS_CV2 else working_image
                     
                     # Detect faces (returns (x, y, w, h) format)
                     faces = detector.detect_faces(bgr_image)
                     
-                    if faces and len(faces) > 0:
+                    # Check if faces were detected (avoid numpy array boolean ambiguity)
+                    if faces is not None and len(faces) > 0:
                         # Convert to face_recognition format (top, right, bottom, left)
                         face_locations = []
                         for (x, y, w, h) in faces:
@@ -251,13 +268,14 @@ class FallbackDetectionManager:
                             face_locations.append((top, right, bottom, left))
                         
                         self.detection_stats[method]['successes'] += 1
-                        logger.info(f"✓ Face detected successfully using {method.value.upper()}")
+                        logger.info(f"🚀 SUCCESS: Face detected using {method.value.upper()} on attempt {len(attempts)}")
                         return {
                             'success': True,
                             'face_locations': face_locations,
                             'method_used': method.value,
                             'attempts': attempts,
-                            'error': None
+                            'error': None,
+                            'detection_speed': 'fast' if len(attempts) <= 2 else 'fallback'
                         }
                     else:
                         logger.debug(f"{method.value} detected 0 faces")
@@ -321,7 +339,8 @@ class FallbackDetectionManager:
                     model=model.value
                 )
                 
-                if encodings and len(encodings) > 0:
+                # Check if encodings were generated (avoid numpy array boolean ambiguity)
+                if encodings is not None and len(encodings) > 0:
                     logger.info(f"✓ Face encoding generated successfully using {model.value.upper()} model")
                     return {
                         'success': True,

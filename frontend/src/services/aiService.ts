@@ -2,7 +2,7 @@ import api from './api'
 import type { FaceRecognitionResult } from '@/types'
 
 export const aiService = {
-  // Face Registration - sends images one by one with enhanced error handling
+  // Face Registration - single image processing
   registerFace: async (rollNumber: string, images: File[]): Promise<void> => {
     if (images.length === 0) {
       throw new Error('No images provided')
@@ -12,53 +12,24 @@ export const aiService = {
       throw new Error('Only one image is allowed')
     }
 
-    let successCount = 0
-    let lastError: Error | null = null
+    const imageFile = images[0]
+    
+    try {
+      const formData = new FormData()
+      formData.append('student_id', rollNumber)
+      formData.append('image', imageFile)
 
-    // Send images one by one with enhanced error handling
-    for (let i = 0; i < images.length; i++) {
-      try {
-        const formData = new FormData()
-        formData.append('student_id', rollNumber)
-        formData.append('image', images[i])
+      const response = await api.post('/ai/face-registration/register-face/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 90000, // 90 seconds for enhanced processing
+      })
 
-        const response = await api.post('/ai/face-registration/register-face/', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 90000, // 90 seconds for enhanced processing
-        })
-
-        successCount++
-        console.log(`Image ${i + 1} registered successfully:`, response.data)
-
-        // If first image succeeds, continue with others for enhanced accuracy
-        if (i === 0) {
-          console.log('Primary image registration successful, processing additional images...')
-        }
-
-      } catch (error: any) {
-        console.error(`Error registering image ${i + 1}:`, error)
-        lastError = error
-
-        // If this is the first image and it fails, try the next one
-        if (i === 0 && images.length > 1) {
-          console.warn(`First image failed, trying next image...`)
-          continue
-        }
-
-        // For subsequent images, log the error but don't fail the entire process
-        if (successCount > 0) {
-          console.warn(`Image ${i + 1} failed but continuing since we have successful registrations`)
-          continue
-        }
-      }
+      console.log('Face registered successfully:', response.data)
+      
+    } catch (error: any) {
+      console.error('Error registering face:', error)
+      throw error
     }
-
-    // Check if we have at least one successful registration
-    if (successCount === 0) {
-      throw lastError || new Error(`All ${images.length} images failed to register`)
-    }
-
-    console.log(`Face registration completed: ${successCount}/${images.length} images successful`)
   },
 
   // Update face registration with enhanced handling
@@ -71,49 +42,15 @@ export const aiService = {
       throw new Error('Only one image is allowed')
     }
 
-    let successCount = 0
-    let lastError: Error | null = null
+    const formData = new FormData()
+    formData.append('student_id', rollNumber)
+    formData.append('image', images[0])
+    formData.append('clear_existing', 'true')
 
-    // Send images one by one for update
-    for (let i = 0; i < images.length; i++) {
-      try {
-        const formData = new FormData()
-        formData.append('student_id', rollNumber)
-        formData.append('image', images[i])
-        
-        // For first image, clear existing data
-        if (i === 0) {
-          formData.append('clear_existing', 'true')
-        } else {
-          formData.append('clear_existing', 'false')
-        }
-
-        const response = await api.post('/ai/face-registration/update-face/', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 90000, // 90 seconds for enhanced processing
-        })
-
-        successCount++
-        console.log(`Image ${i + 1} updated successfully:`, response.data)
-
-      } catch (error: any) {
-        console.error(`Error updating image ${i + 1}:`, error)
-        lastError = error
-
-        // For updates, try to continue with other images if we have at least one success
-        if (successCount > 0 && i > 0) {
-          console.warn(`Image ${i + 1} failed but continuing since we have successful updates`)
-          continue
-        }
-      }
-    }
-
-    // Check if we have at least one successful update
-    if (successCount === 0) {
-      throw lastError || new Error(`All ${images.length} images failed to update`)
-    }
-
-    console.log(`Face update completed: ${successCount}/${images.length} images successful`)
+    await api.post('/ai/face-registration/update-face/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 90000, // 90 seconds for enhanced processing
+    })
   },
 
   // Update face encoding

@@ -309,6 +309,150 @@ class AIServiceManager:
             logger.info(f"Confidence threshold set to {threshold}")
             return True
         return False
+    
+    def check_face_duplicate(self, image_file, current_student_roll: str) -> dict:
+        """
+        Check if the face in the image is already registered for another student.
+        
+        Args:
+            image_file: Django uploaded file containing face image
+            current_student_roll: Roll number of student trying to register (to exclude from duplicate check)
+        
+        Returns:
+            dict with 'is_duplicate' boolean and 'existing_student' if duplicate found
+        """
+        result = {
+            'is_duplicate': False,
+            'existing_student': None,
+            'confidence': 0.0
+        }
+        
+        try:
+            # Ensure pipeline is initialized
+            self._ensure_pipeline_initialized()
+            
+            # Convert image to numpy array
+            from PIL import Image
+            from apps.ai_core.facial_recognition import ImageProcessor
+            import face_recognition
+            import numpy as np
+            
+            logger.info(f"Starting duplicate check for student: {current_student_roll}")
+            
+            image = Image.open(image_file)
+            image_array = ImageProcessor.convert_pil_to_cv2(image)
+            
+            if image_array is None:
+                logger.warning("Could not convert image for duplicate check")
+                return result
+            
+            # Get face encoding for the input image
+            logger.debug("Extracting face encoding from input image...")
+            encoding, error_message, face_location, metadata = self._pipeline._extract_face_encoding(
+                image_array, 
+                check_quality=False  # Skip quality checks for faster comparison
+            )
+            
+            if encoding is None:
+                logger.warning(f"Could not extract face encoding for duplicate check: {error_message}")
+                return result
+                
+            # Ensure encoding is a proper numpy array
+            if not isinstance(encoding, np.ndarray):
+                logger.warning(f"Encoding is not numpy array: {type(encoding)}")
+                return result
+                
+            if encoding.size == 0:
+                logger.warning("Face encoding is empty for duplicate check")
+                return result
+            
+            logger.info(f"Successfully extracted encoding of shape: {encoding.shape}")
+            
+            # Get all registered students (excluding current student)
+            registered_students = StudentProfile.objects.filter(
+                is_face_registered=True,
+                face_embedding__isnull=False
+            ).exclude(roll_number=current_student_roll)
+            
+            logger.info(f"Checking for duplicates against {registered_students.count()} registered students")
+            
+            # Check against each registered student's face
+            for student in registered_students:
+                try:
+                    logger.debug(f"Checking student: {student.roll_number}")
+                    
+                    # Get stored encoding safely
+                    stored_encoding = None
+                    try:
+                        stored_encoding = student.get_face_embedding()
+                    except Exception as encoding_error:
+                        logger.error(f"Failed to get encoding for student {student.roll_number}: {encoding_error}")
+                        continue
+                    
+                    # Validate stored encoding
+                    if stored_encoding is None:
+                        logger.debug(f"Student {student.roll_number} has no face encoding")
+                        continue
+                        
+                    if not isinstance(stored_encoding, np.ndarray):
+                        logger.debug(f"Student {student.roll_number} encoding is not numpy array: {type(stored_encoding)}")
+                        continue
+                        
+                    if stored_encoding.size == 0:
+                        logger.debug(f"Student {student.roll_number} has empty encoding")
+                        continue
+                    
+                    logger.debug(f"Student {student.roll_number} encoding shape: {stored_encoding.shape}")
+                    
+                    # Use a more sensitive tolerance for duplicate detection
+                    tolerance = 0.5
+                    
+                    # Perform face comparison safely
+                    try:
+                        logger.debug(f"Comparing faces for student {student.roll_number}...")
+                        
+                        # Ensure both encodings are properly formatted
+                        stored_encoding_list = [stored_encoding]  # Wrap in list for face_recognition
+                        
+                        matches = face_recognition.compare_faces(
+                            stored_encoding_list, 
+                            encoding, 
+                            tolerance=tolerance
+                        )
+                        
+                        distances = face_recognition.face_distance(stored_encoding_list, encoding)
+                        
+                        if len(matches) > 0 and len(distances) > 0:
+                            match_found = bool(matches[0])  # Explicit boolean conversion
+                            distance = float(distances[0])  # Explicit float conversion
+                            confidence = 1 - distance
+                            
+                            logger.info(f"Student {student.roll_number}: distance={distance:.3f}, confidence={confidence:.3f}, match={match_found}")
+                            
+                            if match_found:  # Face match found
+                                result['is_duplicate'] = True
+                                result['existing_student'] = student.roll_number
+                                result['confidence'] = confidence
+                                
+                                logger.warning(f"Duplicate face detected! Face matches student {student.roll_number} with {confidence:.2f} confidence")
+                                return result
+                        else:
+                            logger.warning(f"Empty comparison results for student {student.roll_number}")
+                            
+                    except Exception as comparison_error:
+                        logger.error(f"Face comparison failed for student {student.roll_number}: {comparison_error}")
+                        continue
+                        
+                except Exception as student_error:
+                    logger.error(f"Error processing student {student.roll_number}: {student_error}")
+                    continue
+            
+            logger.info("No duplicate faces found")
+            
+        except Exception as e:
+            logger.error(f"Error during duplicate face check: {e}")
+        
+        return result
 
 
 def get_ai_manager() -> AIServiceManager:

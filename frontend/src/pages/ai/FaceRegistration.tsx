@@ -162,7 +162,7 @@ const FaceRegistration = () => {
     }
 
     setIsProcessing(true)
-    const loadingToast = toast.loading('Processing images... This may take a moment')
+    const loadingToast = toast.loading('Processing and checking for duplicates... This may take a moment')
 
     try {
       // Convert base64 images to files
@@ -173,53 +173,37 @@ const FaceRegistration = () => {
         })
       )
 
-      let successCount = 0
-      let lastError: string | null = null
+      // Since we only have 1 image now, simplify the logic
+      const imageFile = files[0]
       
-      // Process images with minimal notifications
-      for (let i = 0; i < files.length; i++) {
-        try {
-          if (isUpdate) {
-            await aiService.updateFace(studentId, [files[i]])
-          } else {
-            await aiService.registerFace(studentId, [files[i]])
-          }
-          successCount++
-          
-          // Only show success for first image
-          if (i === 0) {
-            toast.dismiss(loadingToast)
-            toast.loading('Processing additional images for better accuracy...')
-          }
-          
-        } catch (error: any) {
-          lastError = error.response?.data?.error || error.message || `Image ${i + 1} failed`
-          
-          // Continue processing remaining images if first succeeds
-          if (successCount === 0 && i === 0 && files.length > 1) {
-            continue
-          }
-        }
-      }
-
-      toast.dismiss()
-      
-      if (successCount > 0) {
-        toast.success(`Face ${isUpdate ? 'updated' : 'registered'} successfully! (${successCount}/${files.length} images processed)`)
-        setStudentId('')
-        setCapturedImages([])
-        
-        if (prefilledRollNumber) {
-          setTimeout(() => navigate(-1), 1000)
-        }
+      // Call the appropriate API
+      if (isUpdate) {
+        await aiService.updateFace(studentId, [imageFile])
       } else {
-        toast.error(`Registration failed: ${lastError}. Please try again with better lighting conditions.`)
+        await aiService.registerFace(studentId, [imageFile])
+      }
+      
+      // Success case - only reached if API call succeeds
+      toast.dismiss()
+      toast.success(`Face ${isUpdate ? 'updated' : 'registered'} successfully!`)
+      setStudentId('')
+      setCapturedImages([])
+      
+      if (prefilledRollNumber) {
+        setTimeout(() => navigate(-1), 1000)
       }
 
     } catch (error: any) {
+      // Handle all errors (file conversion or API errors)
       toast.dismiss()
-      const errorMsg = error.response?.data?.error || error.message || 'Registration failed'
-      toast.error(`Error: ${errorMsg}`)
+      const errorMessage = error.response?.data?.error || error.message || 'Registration failed'
+      
+      // Check if it's a duplicate face error
+      if (errorMessage.includes('already registered for another student')) {
+        toast.error(`${errorMessage}`)
+      } else {
+        toast.error(`Registration failed: ${errorMessage}. Please try again with better lighting conditions.`)
+      }
     } finally {
       setIsProcessing(false)
     }
