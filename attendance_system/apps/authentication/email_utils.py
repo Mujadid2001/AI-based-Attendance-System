@@ -997,3 +997,116 @@ def send_password_reset_success_email(user, ip_address=None, user_agent=None):
     except Exception as e:
         logger.error(f"Failed to send password reset success email to {user.email}: {e}")
         return False
+
+
+def send_teacher_rejection_email(user, ip_address=None):
+    """
+    Send teacher account rejection notification email.
+    
+    Args:
+        user: User instance
+        ip_address: Optional IP address for security info
+    
+    Returns:
+        bool: True if email sent successfully, False otherwise
+    """
+    try:
+        from django.utils import timezone
+        
+        subject = f'Teacher Account Application - {SYSTEM_NAME}'
+        
+        html_message = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background-color: #dc2626; color: white; padding: 20px; text-align: center; }}
+                .content {{ padding: 20px; background-color: #f9f9f9; }}
+                .footer {{ padding: 20px; text-align: center; color: #666; font-size: 12px; }}
+                .warning {{ background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>{SYSTEM_ICON} {SYSTEM_NAME}</h1>
+                    <h2>Teacher Account Application Status</h2>
+                </div>
+                <div class="content">
+                    <p>Hello {user.get_full_name() or user.email},</p>
+                    
+                    <div class="warning">
+                        <p><strong>We regret to inform you that your teacher account application has been rejected.</strong></p>
+                    </div>
+                    
+                    <p>After reviewing your application, our administrators have decided that your request for a teacher account cannot be approved at this time.</p>
+                    
+                    <h3>What happens next:</h3>
+                    <ul>
+                        <li>Your account has been removed from our system</li>
+                        <li>You will need to re-register if you wish to apply again</li>
+                        <li>Please ensure you meet all requirements before reapplying</li>
+                    </ul>
+                    
+                    <h3>If you believe this is an error:</h3>
+                    <p>Please contact our support team with your application details and any supporting documentation.</p>
+                    
+                    <p>Thank you for your interest in {SYSTEM_NAME}.</p>
+                </div>
+                <div class="footer">
+                    <p>{SYSTEM_NAME} - © {YEAR}</p>
+                    <p>This is an automated notification. Please do not reply to this email.</p>
+                    {f"<p>Notification sent at: {timezone.now().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>" if ip_address else ""}
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        text_message = f"""
+        Teacher Account Application - {SYSTEM_NAME}
+        
+        Hello {user.get_full_name() or user.email},
+        
+        We regret to inform you that your teacher account application has been rejected.
+        
+        After reviewing your application, our administrators have decided that your request 
+        for a teacher account cannot be approved at this time.
+        
+        What happens next:
+        • Your account has been removed from our system
+        • You will need to re-register if you wish to apply again
+        • Please ensure you meet all requirements before reapplying
+        
+        If you believe this is an error:
+        Please contact our support team with your application details and any supporting documentation.
+        
+        Thank you for your interest in {SYSTEM_NAME}.
+        
+        {SYSTEM_NAME} Team
+        
+        This is an automated notification. Please do not reply.
+        """
+        
+        # Send email
+        sent = send_mail(
+            subject=subject,
+            message=text_message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=False,
+            html_message=html_message
+        )
+        
+        if sent:
+            logger.info(f"Teacher rejection notification sent to {user.email}")
+        else:
+            logger.warning(f"Teacher rejection notification failed to send to {user.email}")
+            
+        return bool(sent)
+        
+    except Exception as e:
+        logger.error(f"Failed to send teacher rejection email to {user.email}: {e}")
+        return False

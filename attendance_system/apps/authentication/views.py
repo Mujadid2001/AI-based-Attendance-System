@@ -582,7 +582,12 @@ class UserManagementViewSet(viewsets.ModelViewSet):
         
         logger.info(f"Teacher rejected and deleted: {email} by {request.user.email}")
         
-        # TODO: Send rejection notification email
+        # Send rejection notification email
+        try:
+            from apps.authentication.email_utils import send_teacher_rejection_email
+            send_teacher_rejection_email(user)
+        except Exception as e:
+            logger.warning(f"Failed to send rejection email to {email}: {e}")
         
         return Response({'message': _('Teacher account rejected and removed.')})
     
@@ -597,26 +602,7 @@ class UserManagementViewSet(viewsets.ModelViewSet):
         serializer = UserSerializer(pending, many=True)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['post'])
-    def generate_teacher_code(self, request):
-        """Generate a new teacher verification code (deprecated - no longer used)."""
-        return Response(
-            {'error': _('Teacher verification codes are no longer used. Teachers must be approved by administrators.')},
-            status=status.HTTP_410_GONE
-        )
-        
-        return Response(
-            {'error': _('Teacher verification codes are no longer used. Teachers must be approved by administrators.')},
-            status=status.HTTP_410_GONE
-        )
-    
-    @action(detail=False, methods=['get'])
-    def verification_codes(self, request):
-        """Get list of all teacher verification codes (deprecated - no longer used)."""
-        return Response(
-            {'error': _('Teacher verification codes are no longer used. Teachers must be approved by administrators.')},
-            status=status.HTTP_410_GONE
-        )
+
     
     @action(detail=True, methods=['post'])
     def deactivate(self, request, pk=None):

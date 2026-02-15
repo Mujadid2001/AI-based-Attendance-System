@@ -5,6 +5,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.validators import FileExtensionValidator
 from django.utils.translation import gettext_lazy as _
+from utils.models import TimestampMixin, StatusMixin, AuditMixin
 try:
     import numpy as np
 except ImportError:
@@ -72,14 +73,14 @@ class Course(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    class Meta:
+    class Meta(TimestampMixin.Meta):
         verbose_name = _('Course')
         verbose_name_plural = _('Courses')
         ordering = ['code']
         indexes = [
             models.Index(fields=['code']),
-            models.Index(fields=['is_active']),
-        ]
+            models.Index(fields=['status']),
+        ] + TimestampMixin.Meta.indexes
     
     def __str__(self):
         return f"{self.code} - {self.name}"
@@ -93,7 +94,7 @@ class Course(models.Model):
         return self.student_count() >= self.max_students
 
 
-class StudentProfile(models.Model):
+class StudentProfile(TimestampMixin, StatusMixin, AuditMixin):
     """Student profile with face embedding storage."""
     
     user = models.OneToOneField(
@@ -135,14 +136,9 @@ class StudentProfile(models.Model):
         auto_now_add=True,
         help_text=_('Date of registration')
     )
-    is_active = models.BooleanField(
-        default=True,
-        help_text=_('Student active status')
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+
     
-    class Meta:
+    class Meta(TimestampMixin.Meta):
         verbose_name = _('Student Profile')
         verbose_name_plural = _('Student Profiles')
         ordering = ['roll_number']
