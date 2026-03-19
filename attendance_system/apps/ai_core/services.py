@@ -334,8 +334,18 @@ class AIServiceManager:
             # Convert image to numpy array
             from PIL import Image
             from apps.ai_core.facial_recognition import ImageProcessor
-            import face_recognition
-            import numpy as np
+            
+            # Safe import of face_recognition with error handling
+            try:
+                import face_recognition
+                import numpy as np
+                HAS_FACE_RECOGNITION = True
+            except ImportError as e:
+                logger.warning(f"Face recognition models not available: {e}")
+                logger.info("Please install face_recognition_models: pip install git+https://github.com/ageitgey/face_recognition_models")
+                result['status'] = 'warning'
+                result['message'] = 'Face recognition models not installed. Basic duplicate check performed.'
+                return result
             
             logger.info(f"Starting duplicate check for student: {current_student_roll}")
             

@@ -49,11 +49,14 @@ INSTALLED_APPS = [
     'apps.attendance',
     'apps.ai_core',
     'apps.camera_integration',
+    'apps.enterprise_security',  # Enterprise-level security
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'config.middleware.RateLimitMiddleware',  # Rate limiting - should be early
+    'apps.enterprise_security.middleware.RateLimitMiddleware',  # Enterprise rate limiting
+    'apps.enterprise_security.middleware.SecurityAuditMiddleware',  # Security auditing
+    'apps.enterprise_security.middleware.DataProtectionMiddleware',  # Data protection
     'corsheaders.middleware.CorsMiddleware',  # Must be before CommonMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -61,7 +64,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'config.middleware.RequestLoggingMiddleware',  # Logging - should be last
     # 'silk.middleware.SilkyMiddleware',  # Optional: uncomment if silk is installed 
 ]
 
@@ -102,6 +104,72 @@ CHANNEL_LAYERS = {
             )],
         },
     },
+}
+
+# ==============================================================================
+# ENTERPRISE SECURITY CONFIGURATION  
+# ==============================================================================
+
+# Encryption key for sensitive data (must be 32 url-safe base64-encoded bytes)
+ENCRYPTION_KEY = config(
+    'ENCRYPTION_KEY', 
+    default='your-32-byte-base64-encoded-encryption-key-here'
+)
+
+# Rate limiting settings
+MAX_REQUESTS_PER_MINUTE = config('MAX_REQUESTS_PER_MINUTE', default=100, cast=int)
+AUTH_RATE_LIMIT = config('AUTH_RATE_LIMIT', default=20, cast=int)
+API_RATE_LIMIT = config('API_RATE_LIMIT', default=100, cast=int)
+GENERAL_RATE_LIMIT = config('GENERAL_RATE_LIMIT', default=200, cast=int)
+
+# Block suspicious requests
+BLOCK_SUSPICIOUS_REQUESTS = config('BLOCK_SUSPICIOUS_REQUESTS', default=False, cast=bool)
+
+# Session security
+SESSION_COOKIE_SECURE = not config('DEBUG', default=True, cast=bool)
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Strict'
+SESSION_EXPIRE_AT_BROWSER_CLOSE = config('SESSION_EXPIRE_AT_BROWSER_CLOSE', default=True, cast=bool)
+
+# CSRF protection
+CSRF_COOKIE_SECURE = not config('DEBUG', default=True, cast=bool)
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = 'Strict'
+
+# Security headers
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+# ==============================================================================
+# DATABASE CONFIGURATION
+# ==============================================================================
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DB_NAME', default='attendance_system'),
+        'USER': config('DB_USER', default='postgres'),
+        'PASSWORD': config('DB_PASSWORD', default='postgres'),
+        'HOST': config('DB_HOST', default='127.0.0.1'),
+        'PORT': config('DB_PORT', default='5432', cast=str),
+        'OPTIONS': {
+            'sslmode': 'prefer',
+        },
+    }
+}
+
+# Cache Configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': f"redis://{config('REDIS_HOST', default='127.0.0.1')}:{config('REDIS_PORT', default=6379, cast=int)}/1",
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+        }
+    }
 }
 
 # Password validation

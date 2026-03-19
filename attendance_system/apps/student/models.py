@@ -79,7 +79,7 @@ class Course(models.Model):
         ordering = ['code']
         indexes = [
             models.Index(fields=['code']),
-            models.Index(fields=['status']),
+            models.Index(fields=['is_active']),
         ] + TimestampMixin.Meta.indexes
     
     def __str__(self):

@@ -77,6 +77,9 @@ urlpatterns = [
     path('api/attendance/', include('apps.attendance.urls')),
     path('api/ai/', include('apps.ai_core.urls')),
     path('api/camera/', include('apps.camera_integration.urls')),
+    
+    # Enterprise Security APIs
+    path('', include('apps.enterprise_security.urls')),
 ]
 
 # Serve media files in development (user uploads, face images)
