@@ -17,9 +17,14 @@ class AICoreConfig(AppConfig):
         Initialize AI services eagerly when Django starts.
         This ensures the first request is fast since models are pre-loaded.
         """
-        # Skip initialization during migrations
+        # Skip initialization during migrations, testing, or Celery workers
         import sys
-        if 'migrate' in sys.argv or 'makemigrations' in sys.argv:
+        if any(cmd in sys.argv for cmd in ['migrate', 'makemigrations', 'test_celery', 'worker', 'beat', 'shell']):
+            return
+
+        # Skip initialization if CELERY_WORKER env var is set
+        import os
+        if os.environ.get('CELERY_WORKER'):
             return
 
         try:

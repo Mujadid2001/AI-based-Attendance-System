@@ -24,11 +24,12 @@ from .serializers import (
     SessionSecuritySerializer, ComplianceFrameworkSerializer,
     SecurityIncidentSerializer
 )
+from utils.viewsets import ReadOnlyViewSet, BaseModelViewSet
 
 User = get_user_model()
 
 
-class SecurityAuditViewSet(viewsets.ReadOnlyModelViewSet):
+class SecurityAuditViewSet(ReadOnlyViewSet):
     """Security audit log management for administrators."""
     
     queryset = SecurityAuditLog.objects.all()
@@ -254,7 +255,7 @@ class TwoFactorAuthView(APIView):
         )
 
 
-class SessionSecurityViewSet(viewsets.ReadOnlyModelViewSet):
+class SessionSecurityViewSet(ReadOnlyViewSet):
     """Active session management."""
     
     queryset = SessionSecurity.objects.all()
@@ -293,7 +294,7 @@ class SessionSecurityViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({'message': 'Session terminated successfully'})
 
 
-class ComplianceViewSet(viewsets.ReadOnlyModelViewSet):
+class ComplianceViewSet(ReadOnlyViewSet):
     """Compliance framework management."""
     
     queryset = ComplianceFramework.objects.all()
@@ -339,7 +340,7 @@ class ComplianceViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(serializer.data)
 
 
-class SecurityIncidentViewSet(viewsets.ModelViewSet):
+class SecurityIncidentViewSet(BaseModelViewSet):
     """Security incident management."""
     
     queryset = SecurityIncident.objects.all()

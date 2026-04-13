@@ -17,11 +17,12 @@ from apps.student.serializers import (
     StudentStatsSerializer, StudentUserRegistrationSerializer, StudentProfileUpdateSerializer
 )
 from apps.authentication.permissions import IsAdmin, IsAdminOrTeacher
+from utils.viewsets import BaseModelViewSet
 
 logger = logging.getLogger(__name__)
 
 
-class CourseViewSet(viewsets.ModelViewSet):
+class CourseViewSet(BaseModelViewSet):
     """ViewSet for course management."""
 
     queryset = Course.objects.all()
@@ -29,16 +30,20 @@ class CourseViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     lookup_field = 'pk'  # Changed from 'code' to 'pk' to use ID
 
-    def get_queryset(self):
-        """Filter courses based on user role."""
-        if self.request.user.is_admin():
-            return Course.objects.all()
-        elif self.request.user.is_teacher():
-            return Course.objects.filter(
-                instructor=self.request.user
-            ) | Course.objects.filter(is_active=True)
-        else:  # Student
-            return Course.objects.filter(is_active=True)
+    def get_queryset_for_admin(self):
+        """Admin can see all courses."""
+        return Course.objects.all()
+    
+    def get_queryset_for_teacher(self):
+        """Teachers can see their courses AND all active courses."""
+        from django.db.models import Q
+        return Course.objects.filter(
+            Q(instructor=self.request.user) | Q(is_active=True)
+        )
+    
+    def get_queryset_for_student(self):
+        """Students can see all active courses."""
+        return Course.objects.filter(is_active=True)
 
     def create(self, request, *args, **kwargs):
         """Create course (admin/teacher only)."""
@@ -59,7 +64,7 @@ class CourseViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class StudentProfileViewSet(viewsets.ModelViewSet):
+class StudentProfileViewSet(BaseModelViewSet):
     """ViewSet for student profile management."""
 
     serializer_class = StudentProfileSerializer
@@ -72,28 +77,35 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
             return StudentProfileUpdateSerializer
         return StudentProfileSerializer
 
-    def get_queryset(self):
-        """Filter students based on user role and optional course filter."""
-        # Base queryset based on role
-        if self.request.user.is_admin():
-            queryset = StudentProfile.objects.all()
-        elif self.request.user.is_teacher():
-            # Teachers can see all students
-            queryset = StudentProfile.objects.all()
-        else:  # Student
-            # Students can only see themselves
-            queryset = StudentProfile.objects.filter(user=self.request.user)
+    def get_queryset_for_admin(self):
+        """Admin can see all students."""
+        queryset = StudentProfile.objects.all()
         
-        # Apply course filter if provided (for admin/teacher)
+        # Apply course filter if provided
         course_id = self.request.query_params.get('course')
-        if course_id and (self.request.user.is_admin() or self.request.user.is_teacher()):
-            # Filter students enrolled in the specified course
+        if course_id:
             queryset = queryset.filter(
                 enrollments__course_id=course_id,
                 enrollments__is_active=True
             ).distinct()
-        
         return queryset
+    
+    def get_queryset_for_teacher(self):
+        """Teachers can see all students,potentially filtered by course."""
+        queryset = StudentProfile.objects.all()
+        
+        # Apply course filter if provided
+        course_id = self.request.query_params.get('course')
+        if course_id:
+            queryset = queryset.filter(
+                enrollments__course_id=course_id,
+                enrollments__is_active=True
+            ).distinct()
+        return queryset
+    
+    def get_queryset_for_student(self):
+        """Students can see only themselves."""
+        return StudentProfile.objects.filter(user=self.request.user)
 
     def destroy(self, request, *args, **kwargs):
         """Delete student (admin or teacher)."""
@@ -170,27 +182,40 @@ class StudentProfileViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class EnrollmentViewSet(viewsets.ModelViewSet):
+class EnrollmentViewSet(BaseModelViewSet):
     """ViewSet for enrollment management."""
 
     queryset = Enrollment.objects.all()
     serializer_class = EnrollmentSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        """Filter enrollments by student if provided."""
+    def get_queryset_for_admin(self):
+        """Admin can see all enrollments."""
         queryset = Enrollment.objects.all().order_by('-enrollment_date', 'course__name')
         
-        # Students can only see their own enrollments
-        if self.request.user.is_student():
-            queryset = queryset.filter(student__user=self.request.user)
-        
-        # Filter by student_id if provided (for admin/teacher)
+        # Filter by student_id if provided
         student_id = self.request.query_params.get('student')
-        if student_id and (self.request.user.is_admin() or self.request.user.is_teacher()):
+        if student_id:
             queryset = queryset.filter(student__user_id=student_id)
-        
         return queryset
+    
+    def get_queryset_for_teacher(self):
+        """Teachers can see enrollments for courses they teach."""
+        queryset = Enrollment.objects.filter(
+            course__instructor=self.request.user
+        ).order_by('-enrollment_date', 'course__name')
+        
+        # Filter by student_id if provided
+        student_id = self.request.query_params.get('student')
+        if student_id:
+            queryset = queryset.filter(student__user_id=student_id)
+        return queryset
+    
+    def get_queryset_for_student(self):
+        """Students can see only their own enrollments."""
+        return Enrollment.objects.filter(
+            student__user=self.request.user
+        ).order_by('-enrollment_date', 'course__name')
 
     def create(self, request, *args, **kwargs):
         """Enroll student in course (admin/teacher only)."""

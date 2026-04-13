@@ -3,6 +3,7 @@ import time
 from collections import defaultdict
 from threading import Lock
 from django.http import JsonResponse
+from utils.helpers import get_client_ip
 
 
 logger = logging.getLogger(__name__)
@@ -17,15 +18,6 @@ class RateLimitMiddleware:
         # Rate limit settings
         self.max_requests = 200  # Maximum requests
         self.time_window = 60  # Time window in seconds (1 minute)
-    
-    def get_client_ip(self, request):
-        """Get the real client IP address"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0].strip()
-        else:
-            ip = request.META.get('REMOTE_ADDR', '')
-        return ip
     
     def is_rate_limited(self, ip):
         """Check if IP has exceeded rate limit"""
@@ -47,7 +39,7 @@ class RateLimitMiddleware:
             return False
     
     def __call__(self, request):
-        ip = self.get_client_ip(request)
+        ip = get_client_ip(request)
         
         # Skip rate limiting for camera frame endpoints (they poll frequently)
         if '/camera/sources/' in request.path and '/latest-frame' in request.path:

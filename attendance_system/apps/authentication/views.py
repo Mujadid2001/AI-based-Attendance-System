@@ -25,22 +25,14 @@ from apps.authentication.email_utils import (
 from apps.authentication.permissions import IsAdmin
 from apps.student.models import StudentProfile
 from apps.ai_core.services import get_ai_manager
+from utils.viewsets import ClientIPMixin, BaseModelViewSet
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
-class AuthenticationViewSet(viewsets.ViewSet):
+class AuthenticationViewSet(ClientIPMixin, viewsets.ViewSet):
     """ViewSet for authentication operations."""
-    
-    def get_client_ip(self, request):
-        """Extract client IP address."""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        return (
-            x_forwarded_for.split(',')[0]
-            if x_forwarded_for
-            else request.META.get('REMOTE_ADDR')
-        )
     
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def register(self, request):
@@ -502,7 +494,7 @@ class AuthenticationViewSet(viewsets.ViewSet):
         )
 
 
-class UserManagementViewSet(viewsets.ModelViewSet):
+class UserManagementViewSet(BaseModelViewSet):
     """ViewSet for user management (admin only)."""
     
     queryset = User.objects.all()

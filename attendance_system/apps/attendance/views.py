@@ -24,11 +24,12 @@ from apps.attendance.serializers import (
 from apps.authentication.permissions import IsAdminOrTeacher, IsStudent, IsAdmin
 from apps.student.models import StudentProfile, Course, Enrollment
 from apps.ai_core.services import get_ai_manager
+from utils.viewsets import BaseModelViewSet, ReadOnlyViewSet
 
 logger = logging.getLogger(__name__)
 
 
-class AttendanceSessionViewSet(viewsets.ModelViewSet):
+class AttendanceSessionViewSet(BaseModelViewSet):
     """ViewSet for attendance session management."""
     
     queryset = AttendanceSession.objects.all()
@@ -41,22 +42,22 @@ class AttendanceSessionViewSet(viewsets.ModelViewSet):
             return [IsAuthenticated(), IsAdminOrTeacher()]
         return [IsAuthenticated()]
     
-    def get_queryset(self):
-        """Filter sessions based on user role."""
-        if self.request.user.is_admin():
-            return AttendanceSession.objects.all()
-        elif self.request.user.is_teacher():
-            # Teachers can see sessions they created OR sessions for courses they teach
-            return AttendanceSession.objects.filter(
-                Q(created_by=self.request.user) | Q(course__instructor=self.request.user)
-            ).distinct()
-        else:  # Student
-            # Students can see sessions for courses they're enrolled in
-            return AttendanceSession.objects.filter(
-                course__enrollments__student__user=self.request.user,
-                course__enrollments__is_active=True
-            ).distinct()
-        return AttendanceSession.objects.none()
+    def get_queryset_for_admin(self):
+        """Admin can see all sessions."""
+        return AttendanceSession.objects.all()
+    
+    def get_queryset_for_teacher(self):
+        """Teachers can see sessions they created OR sessions for courses they teach."""
+        return AttendanceSession.objects.filter(
+            Q(created_by=self.request.user) | Q(course__instructor=self.request.user)
+        ).distinct()
+    
+    def get_queryset_for_student(self):
+        """Students can see sessions for courses they're enrolled in."""
+        return AttendanceSession.objects.filter(
+            course__enrollments__student__user=self.request.user,
+            course__enrollments__is_active=True
+        ).distinct()
     
     def perform_create(self, serializer):
         """Set created_by when creating a session."""
@@ -111,7 +112,7 @@ class AttendanceSessionViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class AttendanceViewSet(viewsets.ModelViewSet):
+class AttendanceViewSet(BaseModelViewSet):
     """ViewSet for attendance records."""
     
     queryset = Attendance.objects.all()
@@ -129,23 +130,20 @@ class AttendanceViewSet(viewsets.ModelViewSet):
             return AttendanceCreateSerializer
         return AttendanceSerializer
     
-    def get_queryset(self):
-        """Filter attendance based on user role."""
-        queryset = Attendance.objects.all()
-        
-        if self.request.user.is_admin():
-            return queryset
-        elif self.request.user.is_teacher():
-            # Teachers can see attendance for courses they teach OR sessions they created
-            return queryset.filter(
-                Q(session__course__instructor=self.request.user) |
-                Q(session__created_by=self.request.user)
-            ).distinct()
-        elif self.request.user.is_student():
-            return queryset.filter(
-                student__user=self.request.user
-            )
-        return Attendance.objects.none()
+    def get_queryset_for_admin(self):
+        """Admin can see all attendance."""
+        return Attendance.objects.all()
+    
+    def get_queryset_for_teacher(self):
+        """Teachers can see attendance for courses they teach OR sessions they created."""
+        return Attendance.objects.filter(
+            Q(session__course__instructor=self.request.user) |
+            Q(session__created_by=self.request.user)
+        ).distinct()
+    
+    def get_queryset_for_student(self):
+        """Students can see their own attendance."""
+        return Attendance.objects.filter(student__user=self.request.user)
     
     def update(self, request, *args, **kwargs):
         """Update attendance record."""
@@ -392,21 +390,25 @@ class AttendanceViewSet(viewsets.ModelViewSet):
         })
 
 
-class AttendanceReportViewSet(viewsets.ReadOnlyModelViewSet):
+class AttendanceReportViewSet(ReadOnlyViewSet):
     """ViewSet for attendance reports."""
     
     queryset = AttendanceReport.objects.all()
     serializer_class = AttendanceReportSerializer
     permission_classes = [IsAuthenticated, IsAdminOrTeacher]
     
-    def get_queryset(self):
-        """Filter reports based on user role."""
-        if self.request.user.is_admin():
-            return AttendanceReport.objects.all()
-        elif self.request.user.is_teacher():
-            return AttendanceReport.objects.filter(
-                course__instructor=self.request.user
-            )
+    def get_queryset_for_admin(self):
+        """Admin can see all reports."""
+        return AttendanceReport.objects.all()
+    
+    def get_queryset_for_teacher(self):
+        """Teachers can see reports for courses they teach."""
+        return AttendanceReport.objects.filter(
+            course__instructor=self.request.user
+        )
+    
+    def get_queryset_for_student(self):
+        """Students have no access to reports."""
         return AttendanceReport.objects.none()
     
     @action(detail=False, methods=['post'])

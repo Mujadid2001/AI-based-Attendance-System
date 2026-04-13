@@ -333,3 +333,34 @@ SERVER_PORT = config('SERVER_PORT', default='8000')
 # Force dynamic IP detection even when SERVER_BASE_URL is set
 # Useful for LAN-only production deployments where IP may change
 FORCE_DYNAMIC_IP_DETECTION = config('FORCE_DYNAMIC_IP_DETECTION', default=False, cast=bool)
+
+# ============================================================
+# CELERY CONFIGURATION FOR ASYNC TASKS
+# ============================================================
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://127.0.0.1:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://127.0.0.1:6379/0')
+
+# Task settings
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutes
+CELERY_TASK_ACKS_LATE = True  # Task removed from queue only after successful execution
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Prevent worker from taking too many tasks at once
+
+# Result backend settings
+CELERY_RESULT_EXPIRES = 3600  # Results expire after 1 hour
+
+# Timezone
+CELERY_TIMEZONE = 'UTC'
+
+# Redis & Caching settings
+CELERY_ENABLE_UTC = True
+
+# Cache timeout constants
+CACHE_TIMEOUT_STUDENT_PROFILE = 3600      # 1 hour
+CACHE_TIMEOUT_COURSE_DATA = 1800          # 30 minutes
+CACHE_TIMEOUT_ATTENDANCE_STATS = 600      # 10 minutes
+CACHE_TIMEOUT_USER_PERMISSIONS = 1800     # 30 minutes

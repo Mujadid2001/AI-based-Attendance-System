@@ -8,6 +8,24 @@ from django.http import HttpResponse
 from apps.attendance.models import AttendanceReport
 
 
+def get_client_ip(request) -> str:
+    """
+    Extract client IP address from HTTP request.
+    
+    Handles X-Forwarded-For header for proxied requests (load balancers, ngrok, etc).
+    
+    Args:
+        request: Django HTTP request object
+        
+    Returns:
+        str: Client IP address, or 'unknown' if unable to determine
+    """
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', 'unknown')
+
+
 def export_attendance_to_csv(queryset, course_name: str = "course_name_not_set"):
     """
     Export attendance records to CSV.

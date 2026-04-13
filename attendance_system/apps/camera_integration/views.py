@@ -11,6 +11,7 @@ from django.core.cache import cache
 from django.conf import settings
 from apps.authentication.permissions import IsAdminOrTeacher
 from utils.network import get_server_base_url, get_accessible_ip_info
+from utils.viewsets import BaseModelViewSet
 from apps.ai_core.services import get_ai_manager
 from apps.student.models import StudentProfile
 from apps.attendance.models import Attendance, AttendanceSession
@@ -33,18 +34,23 @@ from asgiref.sync import async_to_sync
 logger = logging.getLogger(__name__)
 
 
-class ExternalCameraViewSet(viewsets.ModelViewSet):
+class ExternalCameraViewSet(BaseModelViewSet):
     """ViewSet for managing external camera sources."""
     
     permission_classes = [IsAuthenticated, IsAdminOrTeacher]
     serializer_class = ExternalCameraSourceSerializer
     
-    def get_queryset(self):
-        """Filter camera sources by created user."""
-        user = self.request.user
-        if user.is_admin():
-            return ExternalCameraSource.objects.all()
-        return ExternalCameraSource.objects.filter(created_by=user)
+    def get_queryset_for_admin(self):
+        """Admin can see all camera sources."""
+        return ExternalCameraSource.objects.all()
+    
+    def get_queryset_for_teacher(self):
+        """Teachers can see camera sources they created."""
+        return ExternalCameraSource.objects.filter(created_by=self.request.user)
+    
+    def get_queryset_for_student(self):
+        """Students have no access to camera sources."""
+        return ExternalCameraSource.objects.none()
     
     def get_serializer_class(self):
         if self.action == 'create':

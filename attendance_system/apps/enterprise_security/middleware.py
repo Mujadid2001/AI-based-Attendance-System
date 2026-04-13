@@ -12,6 +12,7 @@ from django.conf import settings
 from django.utils import timezone
 from .models import SecurityAuditLog, SessionSecurity, SecurityIncident
 from .services import SecurityService
+from utils.helpers import get_client_ip
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ class SecurityAuditMiddleware(MiddlewareMixin):
         # Add security metadata to request
         request.security_metadata = {
             'start_time': time.time(),
-            'ip_address': self.get_client_ip(request),
+            'ip_address': get_client_ip(request),
             'user_agent': request.META.get('HTTP_USER_AGENT', ''),
             'device_fingerprint': self.generate_device_fingerprint(request),
         }
@@ -59,15 +60,6 @@ class SecurityAuditMiddleware(MiddlewareMixin):
                 self.update_session_security(request)
         
         return response
-    
-    def get_client_ip(self, request):
-        """Get the real client IP address."""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0].strip()
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
     
     def generate_device_fingerprint(self, request):
         """Generate a device fingerprint for tracking."""
@@ -173,7 +165,7 @@ class RateLimitMiddleware(MiddlewareMixin):
     """Rate limiting middleware for DDoS protection."""
     
     def process_request(self, request):
-        ip = self.get_client_ip(request)
+        ip = get_client_ip(request)
         
         # Different limits for different endpoints
         if request.path.startswith('/api/auth/'):
@@ -209,15 +201,6 @@ class RateLimitMiddleware(MiddlewareMixin):
         # Increment the counter
         cache.set(cache_key, current_count + 1, window)
         return None
-    
-    def get_client_ip(self, request):
-        """Get the real client IP address."""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0].strip()
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
 
 
 class DataProtectionMiddleware(MiddlewareMixin):

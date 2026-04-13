@@ -1,3 +1,0 @@
-"""
-Init for commands.
-"""
