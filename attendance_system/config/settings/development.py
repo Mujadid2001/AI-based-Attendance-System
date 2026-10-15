@@ -8,7 +8,7 @@ from .base import *
 from .app_settings import *
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = False
 
 ALLOWED_HOSTS = ['*']
 

@@ -13,7 +13,7 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 # Must set ALLOWED_HOSTS in production
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
-    default='localhost,127.0.0.1',
+    default='localhost,127.0.0.1,mujadid.pythonanywhere.com',
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
 
