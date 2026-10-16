@@ -80,11 +80,17 @@ class SecurityAuditMiddleware(MiddlewareMixin):
         if requests_count > getattr(settings, 'MAX_REQUESTS_PER_MINUTE', 100):
             return True
         
-        # Check for known attack patterns
+        # Check for known attack patterns in the request path.
+        #
+        # 'admin/' used to be in this list, which meant that with
+        # BLOCK_SUSPICIOUS_REQUESTS=True - the production default - every single
+        # request to /admin/ was rejected with 403 and the Django admin was
+        # completely unusable. The admin has its own authentication; the path
+        # being spelled "admin" is not evidence of anything.
         path = request.get_full_path().lower()
         suspicious_patterns = [
-            'admin/', '../', 'union select', 'script>', 'javascript:',
-            'eval(', 'base64_decode', 'file_get_contents', 'shell_exec'
+            '../', 'union select', 'script>', 'javascript:',
+            'eval(', 'base64_decode', 'file_get_contents', 'shell_exec',
         ]
         
         for pattern in suspicious_patterns:

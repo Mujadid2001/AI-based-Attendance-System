@@ -8,10 +8,19 @@ logger = logging.getLogger(__name__)
 # Conditional imports
 try:
     import cv2
-    import numpy as np
     HAS_OPENCV = True
 except ImportError:
+    cv2 = None
     HAS_OPENCV = False
+
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    # np must always be bound: type annotations below are evaluated when this
+    # module is imported, so an unbound name here is a hard ImportError.
+    np = None
+    HAS_NUMPY = False
 
 try:
     import dlib
@@ -59,7 +68,7 @@ class FaceAligner:
             except Exception as e:
                 logger.error(f"Could not initialize face aligner: {e}")
     
-    def _get_eye_center(self, eye_points: np.ndarray) -> Tuple[int, int]:
+    def _get_eye_center(self, eye_points: "np.ndarray") -> Tuple[int, int]:
         """Calculate center point of eye from landmarks.
         
         Args:
@@ -91,7 +100,7 @@ class FaceAligner:
         
         return left_eye_center, right_eye_center
     
-    def align_face(self, image, face_rect=None) -> Optional[np.ndarray]:
+    def align_face(self, image, face_rect=None) -> Optional["np.ndarray"]:
         """Align face in image using eye positions.
         
         Args:
@@ -210,7 +219,7 @@ class SimpleFaceAligner:
         self.target_size = target_size
         self.margin = margin
     
-    def align_face(self, image, face_rect: Tuple[int, int, int, int]) -> Optional[np.ndarray]:
+    def align_face(self, image, face_rect: Tuple[int, int, int, int]) -> Optional["np.ndarray"]:
         """Align face using simple crop and resize.
         
         Args:

@@ -69,16 +69,39 @@ class AttendanceSessionViewSet(BaseModelViewSet):
         course_id = request.data.get('course')
         date_str = request.data.get('date')
         start_time_str = request.data.get('start_time')
-        
+
+        # strptime() raises TypeError on None and ValueError on a malformed
+        # string, and objects.get() raises ValueError/TypeError for a
+        # non-numeric pk. Catch both, otherwise a client that simply omits a
+        # field gets a 500 instead of a 400.
         try:
             course = Course.objects.get(id=course_id)
-            session_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            start_time = datetime.strptime(start_time_str, '%H:%M:%S').time()
-        except (Course.DoesNotExist, ValueError):
+        except (Course.DoesNotExist, ValueError, TypeError):
             return Response(
-                {'error': _('Invalid course, date or time.')},
+                {'error': _('Invalid course.')},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        try:
+            session_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except (ValueError, TypeError):
+            return Response(
+                {'error': _('Invalid date. Expected YYYY-MM-DD.')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if start_time_str:
+            try:
+                start_time = datetime.strptime(start_time_str, '%H:%M:%S').time()
+            except (ValueError, TypeError):
+                return Response(
+                    {'error': _('Invalid start time. Expected HH:MM:SS.')},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            # Default to "right now" rather than midnight, which would make
+            # every student late.
+            start_time = timezone.now().time()
         
         session, created = AttendanceSession.objects.get_or_create(
             course=course,
@@ -254,7 +277,7 @@ class AttendanceViewSet(BaseModelViewSet):
         
         try:
             session = AttendanceSession.objects.get(id=session_id)
-        except AttendanceSession.DoesNotExist:
+        except (AttendanceSession.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Session not found.')},
                 status=status.HTTP_404_NOT_FOUND
@@ -287,7 +310,7 @@ class AttendanceViewSet(BaseModelViewSet):
         
         try:
             student = StudentProfile.objects.get(user=request.user)
-        except StudentProfile.DoesNotExist:
+        except (StudentProfile.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Student profile not found.')},
                 status=status.HTTP_404_NOT_FOUND
@@ -351,10 +374,12 @@ class AttendanceViewSet(BaseModelViewSet):
         """Get attendance history for a student (Admin/Teacher only)."""
         student_id = request.query_params.get('student')
         course_id = request.query_params.get('course')
-        
+
+        # StudentProfile's primary key is `user`, so `user_id` is the correct
+        # lookup and there is no `id` column to filter on.
         try:
-            student = StudentProfile.objects.get(id=student_id)
-        except StudentProfile.DoesNotExist:
+            student = StudentProfile.objects.get(user_id=student_id)
+        except (StudentProfile.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Student not found.')},
                 status=status.HTTP_404_NOT_FOUND
@@ -422,7 +447,7 @@ class AttendanceReportViewSet(ReadOnlyViewSet):
             course = Course.objects.get(id=course_id)
             start = datetime.strptime(start_date, '%Y-%m-%d').date()
             end = datetime.strptime(end_date, '%Y-%m-%d').date()
-        except (Course.DoesNotExist, ValueError):
+        except (Course.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Invalid course or date.')},
                 status=status.HTTP_400_BAD_REQUEST
@@ -484,7 +509,7 @@ class AttendanceReportViewSet(ReadOnlyViewSet):
             course = Course.objects.get(id=course_id)
             start = datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None
             end = datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None
-        except (Course.DoesNotExist, ValueError):
+        except (Course.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Invalid course or date.')},
                 status=status.HTTP_400_BAD_REQUEST
@@ -579,7 +604,7 @@ def mark_attendance_by_face(request):
             return Response(result, status=status.HTTP_200_OK)
         else:
             return Response(result, status=status.HTTP_400_BAD_REQUEST)
-    except AttendanceSession.DoesNotExist:
+    except (AttendanceSession.DoesNotExist, ValueError, TypeError):
         return Response(
             {'detail': 'Session not found'},
             status=status.HTTP_404_NOT_FOUND
@@ -602,7 +627,7 @@ def get_active_session(request):
         )
         serializer = AttendanceSessionSerializer(session)
         return Response(serializer.data)
-    except AttendanceSession.DoesNotExist:
+    except (AttendanceSession.DoesNotExist, ValueError, TypeError):
         return Response(
             {'detail': 'No active session found.'},
             status=status.HTTP_404_NOT_FOUND
@@ -658,7 +683,7 @@ def get_session_records(request, session_id):
         # Use the serializer to return properly structured data
         serializer = AttendanceSerializer(records, many=True)
         return Response(serializer.data)
-    except AttendanceSession.DoesNotExist:
+    except (AttendanceSession.DoesNotExist, ValueError, TypeError):
         return Response(
             {'detail': 'Session not found'},
             status=status.HTTP_404_NOT_FOUND

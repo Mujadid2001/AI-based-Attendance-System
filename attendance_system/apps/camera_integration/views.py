@@ -189,7 +189,7 @@ class ExternalCameraViewSet(BaseModelViewSet):
                 is_enabled=True
             )
             logger.info(f"Frame received from camera: {camera_source.name} ({camera_source.id})")
-        except ExternalCameraSource.DoesNotExist:
+        except (ExternalCameraSource.DoesNotExist, ValueError, TypeError):
             logger.warning(f"Upload frame failed: Invalid access_token (first 30 chars): {access_token[:30] if len(access_token) > 30 else access_token}...")
             logger.warning(f"All camera tokens in DB: {[c.access_token[:20] for c in ExternalCameraSource.objects.all()]}")
             return Response(
@@ -255,7 +255,7 @@ class ExternalCameraViewSet(BaseModelViewSet):
                 )
                 stream_session.frames_received += 1
                 stream_session.save()
-            except CameraStreamSession.DoesNotExist:
+            except (CameraStreamSession.DoesNotExist, ValueError, TypeError):
                 pass
         
         # Check if this is a recognition request (vs just streaming)
@@ -303,7 +303,7 @@ class ExternalCameraViewSet(BaseModelViewSet):
             try:
                 attendance_session = AttendanceSession.objects.get(id=attendance_session_id)
                 student = StudentProfile.objects.get(user_id=int(result['student_id']))
-                
+
                 # Check if already marked
                 existing = Attendance.objects.filter(
                     session=attendance_session,
@@ -414,7 +414,7 @@ class ExternalCameraViewSet(BaseModelViewSet):
             try:
                 attendance_session = AttendanceSession.objects.get(id=attendance_session_id)
                 session_data['attendance_session'] = attendance_session
-            except AttendanceSession.DoesNotExist:
+            except (AttendanceSession.DoesNotExist, ValueError, TypeError):
                 pass
         
         session = CameraStreamSession.objects.create(**session_data)
@@ -439,7 +439,7 @@ class ExternalCameraViewSet(BaseModelViewSet):
                 
                 serializer = CameraStreamSessionSerializer(session)
                 return Response(serializer.data)
-            except CameraStreamSession.DoesNotExist:
+            except (CameraStreamSession.DoesNotExist, ValueError, TypeError):
                 return Response(
                     {'error': _('Session not found.')},
                     status=status.HTTP_404_NOT_FOUND

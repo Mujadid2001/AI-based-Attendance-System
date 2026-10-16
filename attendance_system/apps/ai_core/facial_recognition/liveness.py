@@ -10,15 +10,25 @@ logger = logging.getLogger(__name__)
 # Conditional imports
 try:
     import cv2
-    import numpy as np
     HAS_OPENCV = True
 except ImportError:
+    cv2 = None
     HAS_OPENCV = False
+
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    # Must always be bound: the annotations below are evaluated when this
+    # module is imported, and a missing name here is a hard ImportError.
+    np = None
+    HAS_NUMPY = False
 
 try:
     import dlib
     HAS_DLIB = True
 except ImportError:
+    dlib = None
     HAS_DLIB = False
 
 
@@ -63,7 +73,7 @@ class BlinkLivenessDetector(LivenessDetector):
             except Exception as e:
                 logger.warning(f"Could not initialize dlib predictor: {e}")
     
-    def _calculate_ear(self, eye_points: np.ndarray) -> float:
+    def _calculate_ear(self, eye_points) -> float:
         """Calculate Eye Aspect Ratio (EAR).
         
         EAR = (||p2-p6|| + ||p3-p5||) / (2 * ||p1-p4||)
@@ -85,7 +95,7 @@ class BlinkLivenessDetector(LivenessDetector):
         ear = (vertical1 + vertical2) / (2.0 * horizontal)
         return ear
     
-    def _extract_eye_landmarks(self, frame, shape) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    def _extract_eye_landmarks(self, frame, shape) -> Tuple[Optional[object], Optional[object]]:
         """Extract left and right eye landmarks from dlib shape.
         
         Args:

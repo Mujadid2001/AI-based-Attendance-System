@@ -5,7 +5,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.core.validators import FileExtensionValidator
 from django.utils.translation import gettext_lazy as _
-from utils.models import TimestampMixin, StatusMixin, AuditMixin
+from utils.models import TimestampMixin, AuditMixin
 try:
     import numpy as np
 except ImportError:
@@ -94,7 +94,7 @@ class Course(models.Model):
         return self.student_count() >= self.max_students
 
 
-class StudentProfile(TimestampMixin, StatusMixin, AuditMixin):
+class StudentProfile(TimestampMixin, AuditMixin):
     """Student profile with face embedding storage."""
     
     user = models.OneToOneField(
@@ -136,8 +136,11 @@ class StudentProfile(TimestampMixin, StatusMixin, AuditMixin):
         auto_now_add=True,
         help_text=_('Date of registration')
     )
+    is_active = models.BooleanField(
+        default=True,
+        help_text=_('Student active status')
+    )
 
-    
     class Meta(TimestampMixin.Meta):
         verbose_name = _('Student Profile')
         verbose_name_plural = _('Student Profiles')
@@ -145,6 +148,7 @@ class StudentProfile(TimestampMixin, StatusMixin, AuditMixin):
         indexes = [
             models.Index(fields=['roll_number']),
             models.Index(fields=['is_face_registered']),
+            models.Index(fields=['is_active']),
         ]
     
     def __str__(self):

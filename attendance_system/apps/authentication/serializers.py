@@ -236,18 +236,21 @@ class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
     
     def validate_email(self, value):
-        """Validate email exists and account is active."""
-        try:
-            user = User.objects.get(email=value)
-            if not user.is_active:
-                raise serializers.ValidationError(
-                    _("This account is deactivated. Please contact support.")
-                )
-            return user
-        except User.DoesNotExist as e:
-            # Don't reveal if email exists for security
-            # Return the email to maintain same response structure
-            return value
+        """
+        Validate the address looks deliverable.
+
+        Note what this must NOT do: return a User instance. A `validate_<field>`
+        return value REPLACES `validated_data[field]`, so returning a User here
+        silently makes `validated_data['email']` a <User> object. The view then
+        does `User.objects.get(email=<User>)`, which raises DoesNotExist and
+        gets swallowed by its own "don't reveal whether the account exists"
+        handler - so the endpoint returns a cheerful success while silently
+        sending no email to anyone.
+
+        Whether the account exists and whether it is active are both decided in
+        the view, which returns the same generic message either way.
+        """
+        return value
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):

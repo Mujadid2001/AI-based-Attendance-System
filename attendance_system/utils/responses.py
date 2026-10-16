@@ -287,3 +287,43 @@ class SuccessMessages:
     LOGIN_SUCCESSFUL = _('Login successful.')
     LOGOUT_SUCCESSFUL = _('Logout successful.')
     REGISTRATION_SUCCESSFUL = _('Registration successful.')
+
+# =============================================================================
+# GLOBAL DRF EXCEPTION HANDLER
+# =============================================================================
+def api_exception_handler(exc, context):
+    """
+    DRF `EXCEPTION_HANDLER` for the whole project.
+
+    Delegates to Django REST Framework's default handler and only adds the one
+    case DRF cannot know about: application-level "this feature is switched
+    off on this server" errors.
+
+    Without this, an absent optional dependency (face_recognition, dlib,
+    OpenCV) surfaces as an unhandled 500 with a stack trace, which is both
+    useless to the frontend and alarming in the error log.
+    """
+    from rest_framework.views import exception_handler as drf_exception_handler
+
+    response = drf_exception_handler(exc, context)
+
+    if response is not None:
+        return response
+
+    # Imported here rather than at module scope: apps.ai_core imports this
+    # module, so a top-level import would be circular.
+    from apps.ai_core.services import AIFeatureUnavailable
+
+    if isinstance(exc, AIFeatureUnavailable):
+        body = {
+            'error': str(exc.message),
+            'code': 'feature_unavailable',
+        }
+        if exc.reason:
+            # The underlying reason is useful in the server log and harmless in
+            # the response: it names a missing package, not user data.
+            body['detail'] = exc.reason
+        return Response(body, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    logger.exception('Unhandled exception in API view')
+    return None

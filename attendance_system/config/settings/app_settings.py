@@ -29,7 +29,22 @@ VOICE_SETTINGS = {
     'VOICE_ID': 0,
 }
 
-# Ensure required directories exist
-os.makedirs(os.path.join(BASE_DIR, 'logs'), exist_ok=True)
-os.makedirs(AI_SETTINGS['TRAINING_DATA_DIR'], exist_ok=True)
-os.makedirs(AI_SETTINGS['MODELS_DIR'], exist_ok=True)
+# Ensure required directories exist.
+#
+# These must never be able to take the whole app down: some PaaS filesystems
+# are read-only outside your home directory, and an unhandled OSError while
+# importing settings means every single request returns a 500.
+import logging
+
+logger = logging.getLogger(__name__)
+
+for _path in (
+    os.path.join(BASE_DIR, 'logs'),
+    AI_SETTINGS['TRAINING_DATA_DIR'],
+    AI_SETTINGS['MODELS_DIR'],
+):
+    try:
+        os.makedirs(_path, exist_ok=True)
+    except OSError as exc:
+        logger.warning('Could not create directory %s: %s', _path, exc)
+

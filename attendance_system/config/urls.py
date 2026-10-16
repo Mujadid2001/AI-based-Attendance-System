@@ -31,23 +31,39 @@ def api_root(request):
             'attendance': '/api/attendance/',
             'ai': '/api/ai/',
             'camera': '/api/camera/',
+            'security': '/api/security/',
             'token': '/api/token/',
             'admin': '/admin/',
-        },
-        'documentation': {
-            'api_schema': '/api/schema/',
-            'browsable_api': 'Available on all endpoints when authenticated',
         },
         'health': '/api/health/',
     })
 
 
 def health_check(request):
-    """Health check endpoint for monitoring."""
-    return JsonResponse({
+    """Health check endpoint for monitoring.
+
+    Tries the database too, so a load balancer or uptime check can tell the
+    difference between "the process is up" and "the app actually works".
+    """
+    payload = {
         'status': 'healthy',
         'service': 'AI Attendance System API',
-    })
+        'database': 'ok',
+    }
+    status_code = 200
+
+    try:
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+            cursor.fetchone()
+    except Exception as exc:  # pragma: no cover - depends on live DB
+        payload['status'] = 'degraded'
+        payload['database'] = f'error: {exc.__class__.__name__}'
+        status_code = 503
+
+    return JsonResponse(payload, status=status_code)
 
 
 def mobile_camera_view(request):
@@ -82,6 +98,15 @@ urlpatterns = [
     path('', include('apps.enterprise_security.urls')),
 ]
 
-# Serve media files in development (user uploads, face images)
-if settings.DEBUG:
+# Serve uploaded media and collected static files.
+#
+# In development this is always on. In production it is driven by
+# SERVE_MEDIA_FILES / SERVE_STATIC_FILES in .env, because on PythonAnywhere
+# the faster route is to map /media/ and /static/ in the Web tab instead.
+# WhiteNoise still covers /static/ either way.
+if settings.SERVE_MEDIA_FILES:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+if settings.DEBUG and not settings.SERVE_STATIC_FILES:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+

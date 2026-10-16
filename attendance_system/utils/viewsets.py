@@ -1,6 +1,7 @@
 """
 Base ViewSet classes and mixins to reduce code duplication and enforce consistent patterns.
 """
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -20,9 +21,28 @@ class RoleBasedQuerysetMixin:
     Mixin to provide role-based queryset filtering.
     """
     
+    def _all_objects(self) -> QuerySet:
+        """
+        Unfiltered base queryset, without recursing through get_queryset().
+
+        `get_queryset()` dispatches to the role-specific methods, so those must
+        never call it back. Doing so is infinite recursion, and it only shows
+        up on viewsets that do not declare a class-level `queryset` - which is
+        why it can sit unnoticed for a long time.
+        """
+        if getattr(self, 'queryset', None) is not None:
+            return self.queryset.all()
+        manager = getattr(self, 'model', None)
+        if manager is not None:
+            return manager._default_manager.all()
+        raise ImproperlyConfigured(
+            f'{self.__class__.__name__} must define either a `queryset` '
+            'attribute or a `queryset_for_<role>()` method.'
+        )
+    
     def get_queryset_for_admin(self) -> QuerySet:
         """Get queryset for admin users - should return all objects."""
-        return self.queryset or self.get_queryset()
+        return self._all_objects()
     
     def get_queryset_for_teacher(self) -> QuerySet:
         """Get queryset for teacher users - override in subclasses."""
@@ -37,10 +57,9 @@ class RoleBasedQuerysetMixin:
         Filter queryset based on user role.
         Override the role-specific methods in subclasses.
         """
-        if not hasattr(self.request, 'user') or not self.request.user.is_authenticated:
-            return self.queryset.none() if self.queryset else self.model.objects.none()
-        
-        user = self.request.user
+        user = getattr(self.request, 'user', None)
+        if user is None or not user.is_authenticated:
+            return self._all_objects().none()
         
         if user.is_admin():
             return self.get_queryset_for_admin()
@@ -50,7 +69,7 @@ class RoleBasedQuerysetMixin:
             return self.get_queryset_for_student()
         else:
             # Default to empty queryset for unknown roles
-            return self.queryset.none() if self.queryset else self.model.objects.none()
+            return self._all_objects().none()
 
 
 class ClientIPMixin:

@@ -4,7 +4,9 @@ These settings are shared between development and production.
 Frontend will be implemented separately in React.
 """
 import os
+from datetime import timedelta
 from pathlib import Path
+
 from decouple import config
 
 # Build paths inside the project
@@ -18,14 +20,32 @@ SECRET_KEY = config(
     default='django-insecure-dev-key-change-in-production'
 )
 
+# Single source of truth for DEBUG. Every settings module reads this one flag
+# instead of hard-coding its own value.
+DEBUG = config('DEBUG', default=True, cast=bool)
+
 # Validate SECRET_KEY in production
-if not config('DEBUG', default=True, cast=bool):
+if not DEBUG:
     if SECRET_KEY.startswith('django-insecure-') or len(SECRET_KEY) < 50:
         raise ValueError(
             'CRITICAL: Invalid SECRET_KEY for production. '
             'Generate a strong key: '
             'python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
         )
+    ENCRYPTION_KEY_CHECK = config(
+        'ENCRYPTION_KEY',
+        default='your-32-byte-base64-encoded-encryption-key-here',
+    )
+    try:
+        from cryptography.fernet import Fernet
+
+        Fernet(ENCRYPTION_KEY_CHECK.encode())
+    except Exception as exc:
+        raise ValueError(
+            'CRITICAL: ENCRYPTION_KEY is not a valid Fernet key. '
+            'Generate one with: '
+            'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+        ) from exc
 
 # Application definition
 INSTALLED_APPS = [
@@ -34,15 +54,14 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles', 
+    'django.contrib.staticfiles',
     # Third Party Apps
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',  # required by ROTATE_REFRESH_TOKENS
     'corsheaders',  # For frontend-backend communication
     'channels',  # WebSocket support
-    # 'silk',  # Optional: install django-silk for profiling
-    # 'drf_spectacular',  # Optional: install drf-spectacular for API docs 
-    
+
     # Custom Apps
     'apps.authentication',
     'apps.student',
@@ -93,26 +112,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # ASGI Application for WebSocket support
 ASGI_APPLICATION = 'config.asgi.application'
 
-# Channels Configuration
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [(
-                config('REDIS_HOST', default='127.0.0.1'),
-                config('REDIS_PORT', default=6379, cast=int)
-            )],
-        },
-    },
-}
-
 # ==============================================================================
-# ENTERPRISE SECURITY CONFIGURATION  
+# ENTERPRISE SECURITY CONFIGURATION
 # ==============================================================================
 
 # Encryption key for sensitive data (must be 32 url-safe base64-encoded bytes)
 ENCRYPTION_KEY = config(
-    'ENCRYPTION_KEY', 
+    'ENCRYPTION_KEY',
     default='your-32-byte-base64-encoded-encryption-key-here'
 )
 
@@ -126,51 +132,103 @@ GENERAL_RATE_LIMIT = config('GENERAL_RATE_LIMIT', default=200, cast=int)
 BLOCK_SUSPICIOUS_REQUESTS = config('BLOCK_SUSPICIOUS_REQUESTS', default=False, cast=bool)
 
 # Session security
-SESSION_COOKIE_SECURE = not config('DEBUG', default=True, cast=bool)
+SESSION_COOKIE_SECURE = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Strict'
+SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_EXPIRE_AT_BROWSER_CLOSE = config('SESSION_EXPIRE_AT_BROWSER_CLOSE', default=True, cast=bool)
 
 # CSRF protection
-CSRF_COOKIE_SECURE = not config('DEBUG', default=True, cast=bool)
-CSRF_COOKIE_HTTPONLY = True
-CSRF_COOKIE_SAMESITE = 'Strict'
+CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_HTTPONLY = False  # the JS frontends must read this cookie
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 # Security headers
-SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000, cast=int)
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
+SECURE_REFERRER_POLICY = 'same-origin'
+X_FRAME_OPTIONS = 'DENY'
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
+SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
+
+# PythonAnywhere (and every other TLS-terminating proxy) forwards the original
+# scheme in X-Forwarded-Proto. Without this line Django thinks every request
+# arrived over plain http and SECURE_SSL_REDIRECT sends the client into an
+# endless redirect loop.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
 
 # ==============================================================================
-# DATABASE CONFIGURATION
-# ==============================================================================
+DB_ENGINE = config('DB_ENGINE', default='django.db.backends.sqlite3')
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='attendance_system'),
-        'USER': config('DB_USER', default='postgres'),
-        'PASSWORD': config('DB_PASSWORD', default='postgres'),
-        'HOST': config('DB_HOST', default='127.0.0.1'),
-        'PORT': config('DB_PORT', default='5432', cast=str),
-        'OPTIONS': {
-            'sslmode': 'prefer',
-        },
+
+def _database_settings():
+    """Build DATABASES['default'] from the environment."""
+    if DB_ENGINE == 'django.db.backends.sqlite3':
+        name = config('DB_NAME', default='db.sqlite3')
+        path = name if os.path.isabs(name) else os.path.join(BASE_DIR, name)
+        # Create the containing directory when a nested path is configured
+        # (e.g. "data/db.sqlite3"). A missing directory only surfaces later as
+        # "unable to open database file", which is a confusing way to find out.
+        parent = os.path.dirname(path)
+        if parent:
+            try:
+                os.makedirs(parent, exist_ok=True)
+            except OSError:
+                pass
+        return {
+            'ENGINE': DB_ENGINE,
+            'NAME': path,
+        }
+    db = {
+        'ENGINE': DB_ENGINE,
+        'NAME': config('DB_NAME'),
+        'USER': config('DB_USER', default=''),
+        'PASSWORD': config('DB_PASSWORD', default=''),
+        'HOST': config('DB_HOST', default=''),
+        'PORT': config('DB_PORT', default=''),
     }
-}
+    if DB_ENGINE == 'django.db.backends.mysql':
+        # utf8mb4 is required for emoji and other non-BMP characters in names.
+        db['OPTIONS'] = {'charset': 'utf8mb4'}
+    return db
 
-# Cache Configuration
-CACHES = {
-    'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f"redis://{config('REDIS_HOST', default='127.0.0.1')}:{config('REDIS_PORT', default=6379, cast=int)}/1",
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+
+DATABASES = {'default': _database_settings()}
+
+# ==============================================================================
+# REDIS / CACHE / CHANNEL LAYERS
+# ==============================================================================
+# PythonAnywhere has no Redis server, so USE_REDIS=False must degrade to
+# in-process backends instead of pointing at a localhost Redis that never
+# answers. That keeps `check`, `migrate` and every request working with zero
+# external services.
+USE_REDIS = config('USE_REDIS', default=False, cast=bool)
+REDIS_URL = config('REDIS_URL', default='redis://127.0.0.1:6379/0')
+
+if USE_REDIS:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
         }
     }
-}
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [REDIS_URL]},
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'attendance-system',
+        }
+    }
+    CHANNEL_LAYERS = {
+        'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -194,13 +252,30 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (for Django admin only)
+# Static files (Django admin CSS/JS)
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Media files (user uploads - face images, etc.)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+_configured_media_root = config('MEDIA_ROOT', default='')
+MEDIA_ROOT = (
+    _configured_media_root
+    if _configured_media_root
+    else os.path.join(BASE_DIR, 'media')
+)
+
+# Let Django serve /static/ and /media/ itself. PythonAnywhere can serve
+# both from the Web tab instead, which is faster - turn these off when you
+# have mapped them there. With them off you must run collectstatic first.
+SERVE_STATIC_FILES = config('SERVE_STATIC_FILES', default=not DEBUG, cast=bool)
+SERVE_MEDIA_FILES = config('SERVE_MEDIA_FILES', default=not DEBUG, cast=bool)
+
+# Upload cap per request, in bytes. Keeps a single huge image from filling
+# the disk and stalling every worker.
+MAX_UPLOAD_SIZE_MB = config('MAX_UPLOAD_SIZE_MB', default=10, cast=int)
+DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -222,6 +297,17 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@attendance-system.com')
 
+# Base URL of the React frontend, without a trailing slash. Every link that
+# gets emailed out (password reset, email verification, account approval) is
+# built from this, so it must be the real deployed origin in production -
+# otherwise users are sent to http://localhost:3000/reset-password.
+#
+# Previously this lived only in .env and was read straight from decouple in one
+# place while another place hardcoded localhost, so reset emails silently
+# pointed at the developer's own machine.
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000').rstrip('/')
+
+
 
 # REST Framework configuration for API-only backend
 REST_FRAMEWORK = {
@@ -230,23 +316,20 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',  # For Django admin
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',  # Changed from IsAuthenticated - let actions specify permissions
+        'rest_framework.permissions.AllowAny',  # let each view/action set its own permission
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',  # Optional: disable in production
+        'rest_framework.renderers.BrowsableAPIRenderer',  # removed in production
     ],
-    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
-    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.coreapi.AutoSchema',
+    'EXCEPTION_HANDLER': 'utils.responses.api_exception_handler',
     'NON_FIELD_ERRORS_KEY': 'error',
     'DATETIME_FORMAT': '%Y-%m-%dT%H:%M:%S.%fZ',
 }
 
 # JWT Configuration
-from datetime import timedelta
-
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
@@ -262,18 +345,6 @@ SIMPLE_JWT = {
     
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
-}
-
-# Database Configuration - Must be set in .env file
-DATABASES = {
-    'default': {
-        'ENGINE': config('DB_ENGINE'),
-        'NAME': config('DB_NAME') if config('DB_ENGINE') != 'django.db.backends.sqlite3' else os.path.join(BASE_DIR, config('DB_NAME')),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST'),
-        'PORT': config('DB_PORT'),
-    }
 }
 
 # CORS Configuration for Frontend-Backend Decoupling
@@ -337,8 +408,14 @@ FORCE_DYNAMIC_IP_DETECTION = config('FORCE_DYNAMIC_IP_DETECTION', default=False,
 # ============================================================
 # CELERY CONFIGURATION FOR ASYNC TASKS
 # ============================================================
+# PythonAnywhere gives you a web process and nothing else - no worker, no
+# beat, no broker. With CELERY_TASK_ALWAYS_EAGER=True, task.delay() runs the
+# task inline in the calling thread, so every feature keeps working; you just
+# lose the "reply immediately, finish in the background" behaviour.
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://127.0.0.1:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://127.0.0.1:6379/0')
+CELERY_TASK_ALWAYS_EAGER = config('CELERY_TASK_ALWAYS_EAGER', default=not USE_REDIS, cast=bool)
+CELERY_TASK_EAGER_PROPAGATES = config('CELERY_TASK_EAGER_PROPAGATES', default=False, cast=bool)
 
 # Task settings
 CELERY_ACCEPT_CONTENT = ['json']

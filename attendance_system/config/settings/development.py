@@ -1,57 +1,65 @@
 """
 Development settings for AI-based Attendance System.
-Use this configuration for local development.
+
+Everything here is driven by the DEBUG / database / email flags in the
+project-root .env file, so local development and the PythonAnywhere
+deployment share exactly one configuration surface.
 """
-import os
 from decouple import config
-from .base import *
-from .app_settings import *
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+from .base import *  # noqa: F401,F403
+from .app_settings import *  # noqa: F401,F403
 
-ALLOWED_HOSTS = ['*']
+# DEBUG comes from .env (see base.py). Nothing is hard-coded here, so
+# flipping DEBUG in .env is all it takes.
 
-# Security: Disable some checks for development
-SECURE_SSL_REDIRECT = False
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SECURE = False
+if DEBUG:
+    ALLOWED_HOSTS = config(
+        'ALLOWED_HOSTS',
+        default='localhost,127.0.0.1,0.0.0.0',
+        cast=lambda v: [s.strip() for s in v.split(',') if s.strip()],
+    )
+else:
+    # Never run the dev module with DEBUG off: production.py handles that.
+    raise RuntimeError(
+        'config.settings.development requires DEBUG=True in your .env file. '
+        'Use DJANGO_SETTINGS_MODULE=config.settings.production instead.'
+    )
 
-# CSRF Trusted Origins for frontend
+# HTTPS is a pain while developing over plain http, so keep it off unless
+# DEBUG was explicitly turned off for a production smoke test.
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=False, cast=bool)
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
+
 CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173',
+    origin.strip()
+    for origin in config('CSRF_TRUSTED_ORIGINS', default='').split(',')
+    if origin.strip()
 ]
 
-# Allow all CORS origins in development
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in config(
+        'CORS_ALLOWED_ORIGINS',
+        default='http://localhost:3000,http://127.0.0.1:3000,'
+                'http://localhost:5173,http://127.0.0.1:5173',
+    ).split(',')
+    if origin.strip()
+]
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=bool)
 
-# FORCE SMTP EMAIL BACKEND FOR REAL EMAIL SENDING
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='AI Attendance System <noreply@attendance.com>')
+# dev server / Vite origins
+INTERNAL_IPS = ['127.0.0.1', '::1']
 
-# Development database (SQLite by default, override in .env for PostgreSQL)
-DATABASES = {
-    'default': {
-        'ENGINE': config('DB_ENGINE', default='django.db.backends.sqlite3'),
-        'NAME': config('DB_NAME', default=os.path.join(BASE_DIR, 'db.sqlite3')),
-        'USER': config('DB_USER', default=''),
-        'PASSWORD': config('DB_PASSWORD', default=''),
-        'HOST': config('DB_HOST', default=''),
-        'PORT': config('DB_PORT', default=''),
-    }
-}
+# The Django admin's browsable pages and DRF's browsable API are useful while
+# developing, and never enabled in production.
+REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = [  # noqa: F405
+    'rest_framework.renderers.JSONRenderer',
+    'rest_framework.renderers.BrowsableAPIRenderer',
+]
 
-# Development logging configuration
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -69,43 +77,28 @@ LOGGING = {
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
-            'formatter': 'simple'
-        },
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': os.path.join(BASE_DIR, 'logs', 'development.log'),
-            'maxBytes': 1024 * 1024 * 15,  # 15MB
-            'backupCount': 5,
-            'formatter': 'verbose',
+            'formatter': 'simple',
         },
     },
     'root': {
-        'handlers': ['console', 'file'],
-        'level': 'DEBUG',
+        'handlers': ['console'],
+        'level': 'WARNING',
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
         'apps': {
-            'handlers': ['console', 'file'],
+            'handlers': ['console'],
             'level': 'DEBUG',
             'propagate': False,
         },
     },
-}
-
-# Development-specific middleware (optional)
-MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware']
-INSTALLED_APPS += ['debug_toolbar']
-INTERNAL_IPS = ['127.0.0.1']
-
-# Development settings (in-memory layer for WebSocket)
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-    }
 }

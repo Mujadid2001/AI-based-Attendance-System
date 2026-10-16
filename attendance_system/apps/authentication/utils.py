@@ -1,6 +1,7 @@
+from django.conf import settings
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
-from django.conf import settings
+
 
 def get_csrf_token(request):
     """Get CSRF token for frontend."""
@@ -8,11 +9,12 @@ def get_csrf_token(request):
 
 
 def get_frontend_url():
-    """Get frontend base URL from settings or environment."""
-    # Try to get from settings first, fallback to environment variable
-    frontend_url = getattr(settings, 'FRONTEND_URL', None)
-    if not frontend_url:
-        from decouple import config
-        frontend_url = config('FRONTEND_URL', default='https://localhost:3000')
-    return frontend_url.rstrip('/')
+    """
+    Base URL of the React frontend, without a trailing slash.
 
+    Reads settings.FRONTEND_URL, which is populated from FRONTEND_URL in .env
+    by config/settings/base.py. Callers use this to build the links inside
+    password-reset, verification and approval emails, so it must resolve to the
+    real deployed origin in production.
+    """
+    return settings.FRONTEND_URL.rstrip('/')

@@ -15,10 +15,19 @@ logger = logging.getLogger(__name__)
 
 try:
     import cv2
-    import numpy as np
     HAS_OPENCV = True
 except ImportError:
+    cv2 = None
     HAS_OPENCV = False
+
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    # np must always be bound: type annotations below are evaluated when this
+    # module is imported, so an unbound name here is a hard ImportError.
+    np = None
+    HAS_NUMPY = False
 
 try:
     import face_recognition
@@ -78,7 +87,7 @@ class DetectionConfidenceCalculator:
     }
     
     @staticmethod
-    def calculate_detection_clarity(image: np.ndarray, face_location: Tuple) -> float:
+    def calculate_detection_clarity(image: "np.ndarray", face_location: Tuple) -> float:
         """Calculate clarity of detected face region.
         
         Args:
@@ -109,7 +118,7 @@ class DetectionConfidenceCalculator:
             return 0.5
     
     @staticmethod
-    def calculate_lighting_stability(image: np.ndarray, face_location: Tuple) -> float:
+    def calculate_lighting_stability(image: "np.ndarray", face_location: Tuple) -> float:
         """Calculate lighting consistency in face region.
         
         Args:
@@ -143,7 +152,7 @@ class DetectionConfidenceCalculator:
             return 0.5
     
     @staticmethod
-    def calculate_face_size_score(image: np.ndarray, face_location: Tuple) -> float:
+    def calculate_face_size_score(image: "np.ndarray", face_location: Tuple) -> float:
         """Calculate adequacy of face size in image.
         
         Very small faces are hard to recognize accurately.
@@ -179,7 +188,7 @@ class DetectionConfidenceCalculator:
             return 0.5
     
     @classmethod
-    def calculate_overall_confidence(cls, image: np.ndarray, face_location: Tuple, 
+    def calculate_overall_confidence(cls, image: "np.ndarray", face_location: Tuple, 
                                    detection_method: str) -> Dict[str, float]:
         """Calculate overall confidence score.
         
@@ -272,7 +281,7 @@ class IntelligentDetectionOrchestrator:
             'total_failed': 0,
         }
     
-    def detect_faces_intelligently(self, image: np.ndarray,
+    def detect_faces_intelligently(self, image: "np.ndarray",
                                   preprocessing_metadata: Optional[Dict] = None
                                   ) -> DetectionResult:
         """Detect faces using intelligent cascading strategy.
@@ -448,7 +457,7 @@ class IntelligentDetectionOrchestrator:
                 stop_reason=f"Exception: {str(e)}"
             )
     
-    def _try_detection_method(self, method_name: str, image: np.ndarray) -> List[Tuple]:
+    def _try_detection_method(self, method_name: str, image: "np.ndarray") -> List[Tuple]:
         """Try a specific detection method.
         
         Args:

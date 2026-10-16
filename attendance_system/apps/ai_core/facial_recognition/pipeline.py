@@ -11,11 +11,21 @@ from .detection_orchestrator import IntelligentDetectionOrchestrator, DetectionC
 
 logger = logging.getLogger(__name__)
 
+
 try:
     import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    # np must always be bound: type annotations below are evaluated when this
+    # module is imported, so an unbound name here is a hard ImportError.
+    np = None
+    HAS_NUMPY = False
+
+try:
     import face_recognition
     HAS_FACE_RECOGNITION = True
 except ImportError:
+    face_recognition = None
     HAS_FACE_RECOGNITION = False
 
 
@@ -65,7 +75,7 @@ class FacialRecognitionPipeline:
         
         logger.info(f"Pipeline initialized with confidence_threshold={confidence_threshold}")
     
-    def _detect_face(self, image: np.ndarray) -> Tuple[bool, Optional[Tuple], Dict]:
+    def _detect_face(self, image: "np.ndarray") -> Tuple[bool, Optional[Tuple], Dict]:
         """Detect a single face using intelligent orchestration.
         
         Args:
@@ -103,7 +113,7 @@ class FacialRecognitionPipeline:
             logger.error(f"Detection error: {e}")
             return False, None, {'error': str(e)}
     
-    def _extract_encoding(self, image: np.ndarray, face_location: Tuple) -> Optional[np.ndarray]:
+    def _extract_encoding(self, image: "np.ndarray", face_location: Tuple) -> Optional["np.ndarray"]:
         """Extract face encoding from detected face.
         
         Args:
@@ -143,7 +153,7 @@ class FacialRecognitionPipeline:
             logger.error(f"Encoding extraction failed: {e}")
             return None
     
-    def register_face(self, image: np.ndarray, student_id: str, max_attempts: int = 1) -> Tuple[bool, Optional[np.ndarray], str, Dict]:
+    def register_face(self, image: "np.ndarray", student_id: str, max_attempts: int = 1) -> Tuple[bool, Optional["np.ndarray"], str, Dict]:
         """Register a student's face for recognition.
         
         Args:
@@ -215,7 +225,7 @@ class FacialRecognitionPipeline:
             }
             return False, None, str(e), metadata
     
-    def recognize_face(self, image: np.ndarray, distance_threshold: float = 0.6,
+    def recognize_face(self, image: "np.ndarray", distance_threshold: float = 0.6,
                       return_all_matches: bool = False) -> Dict[str, Any]:
         """Recognize a face in an image.
         
@@ -330,7 +340,7 @@ class FacialRecognitionPipeline:
                 'confidence': 0.0
             }
     
-    def check_liveness(self, frames: List[np.ndarray]) -> Tuple[bool, str]:
+    def check_liveness(self, frames: List["np.ndarray"]) -> Tuple[bool, str]:
         """Check if faces in frames are live (anti-spoofing).
         
         Args:

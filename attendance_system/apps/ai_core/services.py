@@ -11,6 +11,45 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+class AIFeatureUnavailable(Exception):
+    """
+    Raised when an AI feature is requested that cannot run on this server.
+
+    The heavy machine-learning libraries (face_recognition, dlib, OpenCV) are
+    optional: they are imported inside try/except blocks so the app boots
+    without them. This exception is how the rest of the code learns that a
+    particular feature is switched off, instead of the underlying ImportError
+    escaping as an unhandled 500.
+
+    `apps/ai_core` views let it propagate and the DRF exception handler in
+    `utils.responses.api_exception_handler` turns it into a 503 with an
+    actionable message.
+    """
+
+    def __init__(self, message, *, reason=None):
+        super().__init__(message)
+        self.message = message
+        self.reason = reason
+
+
+class _NullVoiceNotifier:
+    """
+    Stand-in used when pyttsx3 (or espeak) is not installed.
+
+    Voice feedback is a nicety, never a requirement, so every method logs at
+    debug level and reports "not spoken" instead of failing the request.
+    """
+
+    def __getattr__(self, name):
+        def _noop(*args, **kwargs):
+            logger.debug('Voice notification %s skipped: pyttsx3 unavailable', name)
+            return False
+        return _noop
+
+    def __bool__(self):
+        return False
+
+
 class AIServiceManager:
     """Singleton manager for AI services."""
     
@@ -19,6 +58,7 @@ class AIServiceManager:
     _voice_notifier = None
     _pipeline_initialized = False
     _voice_initialized = False
+    _pipeline_error = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -32,7 +72,18 @@ class AIServiceManager:
         self._initialize_pipeline()
     
     def _initialize_pipeline(self):
-        """Initialize the facial recognition pipeline."""
+        """
+        Initialize the facial recognition pipeline.
+
+        Records why initialisation failed instead of re-attempting (and
+        re-raising) on every single request.
+        """
+        if self._pipeline_error is not None:
+            raise AIFeatureUnavailable(
+                'Facial recognition is not available on this server.',
+                reason=str(self._pipeline_error),
+            )
+
         try:
             # Import only when needed to avoid slow startup
             from apps.ai_core.facial_recognition import (
@@ -54,9 +105,51 @@ class AIServiceManager:
             self._pipeline_initialized = True
             logger.info("Facial recognition pipeline initialized")
         except Exception as e:
-            logger.error(f"Error initializing facial recognition pipeline: {e}")
-            raise
-    
+            # Cache the failure so we log once, not once per request.
+            self._pipeline_error = e
+            logger.error(
+                'Facial recognition pipeline unavailable: %s', e
+            )
+            raise AIFeatureUnavailable(
+                'Facial recognition is not available on this server. '
+                'Install the optional dependencies with '
+                '"pip install -r requirements-optional.txt".',
+                reason=str(e),
+            ) from e
+
+    def is_facial_recognition_available(self):
+        """
+        Whether the facial recognition pipeline can be used.
+
+        Never raises: safe to call from health checks and capability probes.
+        """
+        try:
+            self._ensure_pipeline_initialized()
+        except AIFeatureUnavailable:
+            return False
+        return True
+
+    def unavailable_reason(self):
+        """Why facial recognition is unavailable, or None if it is available."""
+        if self._pipeline_error is None:
+            self.is_facial_recognition_available()
+        return str(self._pipeline_error) if self._pipeline_error else None
+
+    def get_status(self):
+        """Machine-readable capability report for the frontend / health checks."""
+        available = self.is_facial_recognition_available()
+        self._ensure_voice_initialized()
+        return {
+            'facial_recognition': {
+                'available': available,
+                'reason': str(self._pipeline_error) if self._pipeline_error else None,
+                'threshold': getattr(self._pipeline, 'confidence_threshold', None),
+            },
+            'voice_notifications': {
+                'available': self._voice_notifier is not None,
+            },
+        }
+
     def _ensure_voice_initialized(self):
         """Lazy initialize voice notifier only when needed."""
         if not self._voice_initialized:
@@ -97,8 +190,16 @@ class AIServiceManager:
         return self._pipeline
     
     def get_voice_notifier(self):
-        """Get voice notifier (lazy loads on first access)."""
+        """
+        Get the voice notifier (lazy loads on first access).
+
+        Never returns None: callers invoke methods like notify_present()
+        inline in request handling, and an AttributeError on a missing optional
+        package must never turn into a 500. Falls back to a no-op notifier.
+        """
         self._ensure_voice_initialized()
+        if self._voice_notifier is None:
+            return _NullVoiceNotifier()
         return self._voice_notifier
     
     def register_student_face(self, image_file, student: StudentProfile, max_attempts=6) -> dict:
@@ -280,6 +381,10 @@ class AIServiceManager:
             
             logger.info(f"Loaded {count} student face encodings into pipeline storage")
             return True
+        except AIFeatureUnavailable:
+            # "the feature is switched off" is not the same as "the load
+            # failed" - let it reach the client as a 503.
+            raise
         except Exception as e:
             logger.error(f"Error loading student faces: {e}")
             return False
@@ -295,6 +400,8 @@ class AIServiceManager:
                 'face_encodings.pkl'
             )
             return self._pipeline.save_training_data(training_data_path)
+        except AIFeatureUnavailable:
+            raise
         except Exception as e:
             logger.error(f"Error saving training data: {e}")
             return False

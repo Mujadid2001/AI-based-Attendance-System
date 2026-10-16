@@ -126,7 +126,7 @@ class TwoFactorAuthView(APIView):
             two_fa = TwoFactorAuth.objects.get(user=request.user)
             serializer = TwoFactorAuthSerializer(two_fa)
             return Response(serializer.data)
-        except TwoFactorAuth.DoesNotExist:
+        except (TwoFactorAuth.DoesNotExist, ValueError, TypeError):
             return Response({
                 'is_enabled': False,
                 'method': None,
@@ -199,7 +199,7 @@ class TwoFactorAuthView(APIView):
         """Enable/disable 2FA."""
         try:
             two_fa = TwoFactorAuth.objects.get(user=request.user)
-        except TwoFactorAuth.DoesNotExist:
+        except (TwoFactorAuth.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': '2FA not set up'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -383,7 +383,7 @@ class SecurityIncidentViewSet(BaseModelViewSet):
             
             return Response({'message': 'Incident assigned successfully'})
         
-        except User.DoesNotExist:
+        except (User.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': 'Invalid assignee'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -431,9 +431,23 @@ class SystemHealthView(APIView):
             status__in=['open', 'investigating']
         ).count()
         
-        # Check system resources (basic example)
-        import psutil
-        
+        # System resource metrics are a nice-to-have. psutil is not a hard
+        # dependency, and a monitoring endpoint that throws a 500 because an
+        # optional package is missing is worse than one that reports less.
+        try:
+            import psutil
+
+            system_metrics = {
+                'cpu_usage': psutil.cpu_percent(),
+                'memory_usage': psutil.virtual_memory().percent,
+                'disk_usage': psutil.disk_usage('/').percent,
+            }
+        except ImportError:
+            system_metrics = {
+                'available': False,
+                'reason': 'psutil is not installed',
+            }
+
         health_status = {
             'timestamp': now.isoformat(),
             'status': 'healthy',  # can be 'healthy', 'warning', 'critical'
@@ -444,11 +458,7 @@ class SystemHealthView(APIView):
                     is_enabled=True
                 ).count(),
             },
-            'system': {
-                'cpu_usage': psutil.cpu_percent(),
-                'memory_usage': psutil.virtual_memory().percent,
-                'disk_usage': psutil.disk_usage('/').percent,
-            },
+            'system': system_metrics,
             'compliance': {
                 'active_frameworks': ComplianceFramework.objects.filter(
                     is_enabled=True

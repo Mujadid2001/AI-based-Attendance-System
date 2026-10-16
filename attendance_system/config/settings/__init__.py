@@ -1,18 +1,23 @@
 """
-Settings package for AI-based Attendance System.
+Settings package for the AI Attendance System.
 
-Environment-based settings loading:
-- Development: Use DJANGO_SETTINGS_MODULE=config.settings.development
-- Production: Use DJANGO_SETTINGS_MODULE=config.settings.production
+Available settings modules:
 
-Default is development if DJANGO_ENV is not set.
+* ``config.settings.development``  - local development (DEBUG=True)
+* ``config.settings.production``   - PythonAnywhere deployment (DEBUG=False)
+
+Select one with the ``DJANGO_SETTINGS_MODULE`` environment variable, or by
+setting it in the ``.env`` file at the project root:
+
+    DJANGO_SETTINGS_MODULE=config.settings.production
+
+This module deliberately contains no imports and no logic.
+
+Django imports the *parent package* before the requested submodule, so
+anything executed here runs for EVERY settings module. An earlier version did
+``from .development import *``, which meant that asking for the production
+settings silently loaded the development ones first - and, once development
+settings started validating DEBUG, it aborted startup outright.
 """
-import os
 
-# Determine which settings to use based on environment
-env = os.getenv('DJANGO_ENV', 'development')
-
-if env == 'production':
-    from .production import *
-else:
-    from .development import *
+# Intentionally empty. See the module docstring above.

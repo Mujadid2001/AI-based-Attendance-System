@@ -3,10 +3,15 @@ from apps.student.models import StudentProfile
 from django.utils import timezone
 
 def mark_attendance(session_id, student_id, status, confidence, liveness, user):
+    # StudentProfile's primary key is `user` (a OneToOneField with
+    # primary_key=True), so there is no `id` column - filtering by `id`
+    # raises FieldError and a non-numeric id raises ValueError. Both are
+    # caller-supplied, so both have to be handled here.
     try:
         session = AttendanceSession.objects.get(id=session_id)
-        student = StudentProfile.objects.get(id=student_id)
-    except (AttendanceSession.DoesNotExist, StudentProfile.DoesNotExist):
+        student = StudentProfile.objects.get(user_id=student_id)
+    except (AttendanceSession.DoesNotExist, StudentProfile.DoesNotExist,
+            ValueError, TypeError):
         return None, False
 
     attendance, created = Attendance.objects.get_or_create(

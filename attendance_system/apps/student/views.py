@@ -231,12 +231,12 @@ class EnrollmentViewSet(BaseModelViewSet):
         try:
             student = StudentProfile.objects.get(user_id=student_id)
             course = Course.objects.get(id=course_id)
-        except StudentProfile.DoesNotExist:
+        except (StudentProfile.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Student not found.')},
                 status=status.HTTP_404_NOT_FOUND
             )
-        except Course.DoesNotExist:
+        except (Course.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Course not found.')},
                 status=status.HTTP_404_NOT_FOUND

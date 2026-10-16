@@ -7,10 +7,19 @@ logger = logging.getLogger(__name__)
 
 try:
     import cv2
-    import numpy as np
     HAS_OPENCV = True
 except ImportError:
+    cv2 = None
     HAS_OPENCV = False
+
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    # np must always be bound: type annotations below are evaluated when this
+    # module is imported, so an unbound name here is a hard ImportError.
+    np = None
+    HAS_NUMPY = False
 
 
 class PreprocessingStage(Enum):
@@ -37,7 +46,7 @@ class ImagePreprocessor:
         self.enable_adaptive_preprocessing = enable_adaptive_preprocessing
         self.preprocessing_profile = None
     
-    def _analyze_image_characteristics(self, image: np.ndarray) -> Dict[str, Any]:
+    def _analyze_image_characteristics(self, image: "np.ndarray") -> Dict[str, Any]:
         """Analyze image characteristics to determine preprocessing strategy.
         
         Args:
@@ -92,7 +101,7 @@ class ImagePreprocessor:
         else:
             return 'normal'
     
-    def _denoise(self, image: np.ndarray, strength: int = 9) -> np.ndarray:
+    def _denoise(self, image: "np.ndarray", strength: int = 9) -> "np.ndarray":
         """Apply denoising using bilateral filtering.
         
         Preserves edges while reducing noise - optimal for face detection.
@@ -107,7 +116,7 @@ class ImagePreprocessor:
             logger.warning(f"Denoising failed: {e}")
             return image
     
-    def _normalize_lighting(self, image: np.ndarray) -> np.ndarray:
+    def _normalize_lighting(self, image: "np.ndarray") -> "np.ndarray":
         """Apply CLAHE (Contrast Limited Adaptive Histogram Equalization).
         
         Normalizes lighting conditions across the image for better face detection
@@ -136,7 +145,7 @@ class ImagePreprocessor:
             logger.warning(f"Lighting normalization failed: {e}")
             return image
     
-    def _enhance_contrast(self, image: np.ndarray) -> np.ndarray:
+    def _enhance_contrast(self, image: "np.ndarray") -> "np.ndarray":
         """Enhance contrast using unsharp masking.
         
         Improves facial features visibility for better detection accuracy.
@@ -150,12 +159,12 @@ class ImagePreprocessor:
             # Unsharp mask: enhance edges and details
             enhanced = cv2.addWeighted(image, 1.5, gaussian, -0.5, 0)
             # Clip values to valid range
-            return np.clip(enhanced, 0, 255).astype(np.uint8)
+            return np.clip(enhanced, 0, 255).astype("np.uint8")
         except Exception as e:
             logger.warning(f"Contrast enhancement failed: {e}")
             return image
     
-    def _adjust_gamma(self, image: np.ndarray, gamma: float = 1.0) -> np.ndarray:
+    def _adjust_gamma(self, image: "np.ndarray", gamma: float = 1.0) -> "np.ndarray":
         """Apply gamma correction for brightness adjustment.
         
         Gamma < 1.0: Brightens image
@@ -166,13 +175,13 @@ class ImagePreprocessor:
         
         try:
             inv_gamma = 1.0 / gamma
-            table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)]).astype(np.uint8)
+            table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in range(256)]).astype("np.uint8")
             return cv2.LUT(image, table)
         except Exception as e:
             logger.warning(f"Gamma correction failed: {e}")
             return image
     
-    def sharpen(self, image: np.ndarray, kernel_size: int = 3) -> np.ndarray:
+    def sharpen(self, image: "np.ndarray", kernel_size: int = 3) -> "np.ndarray":
         """Apply sharpening filter to enhance facial features.
         
         Args:
@@ -189,12 +198,12 @@ class ImagePreprocessor:
             # Unsharp masking for edge enhancement
             gaussian = cv2.GaussianBlur(image, (0, 0), 1.0)
             sharpened = cv2.addWeighted(image, 2.0, gaussian, -1.0, 0)
-            return np.clip(sharpened, 0, 255).astype(np.uint8)
+            return np.clip(sharpened, 0, 255).astype("np.uint8")
         except Exception as e:
             logger.warning(f"Sharpening failed: {e}")
             return image
     
-    def preprocess(self, image: np.ndarray, aggressive: bool = False) -> Tuple[np.ndarray, Dict[str, Any]]:
+    def preprocess(self, image: "np.ndarray", aggressive: bool = False) -> Tuple["np.ndarray", Dict[str, Any]]:
         """Apply intelligent preprocessing pipeline.
         
         Args:

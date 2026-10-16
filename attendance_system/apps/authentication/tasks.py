@@ -7,6 +7,8 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.conf import settings
 
+from apps.authentication.utils import get_frontend_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,7 +21,7 @@ def send_verification_email(self, user_id, token):
         user = User.objects.get(id=user_id)
         
         # Build verification link
-        frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else 'http://localhost:3000'
+        frontend_url = get_frontend_url()
         verification_link = f"{frontend_url}/verify-email?token={token}"
         
         # Log the verification link (in production, send via email)
@@ -55,7 +57,7 @@ def send_password_reset_email(self, user_id, token):
         user = User.objects.get(id=user_id)
         
         # Build reset link
-        frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else 'http://localhost:3000'
+        frontend_url = get_frontend_url()
         reset_link = f"{frontend_url}/reset-password?token={token}"
         
         # Log the reset link (in production, send via email)

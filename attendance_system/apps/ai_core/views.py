@@ -68,7 +68,7 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
                 
-        except StudentProfile.DoesNotExist:
+        except (StudentProfile.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Student not found. Please check the roll number.')},
                 status=status.HTTP_404_NOT_FOUND
@@ -167,7 +167,7 @@ class FaceRegistrationViewSet(viewsets.ViewSet):
                 
                 logger.info(f"Cleared existing face data for student: {student.roll_number}")
                 
-        except StudentProfile.DoesNotExist:
+        except (StudentProfile.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Student not found. Please check the roll number.')},
                 status=status.HTTP_404_NOT_FOUND
@@ -333,7 +333,7 @@ class FaceRecognitionViewSet(viewsets.ViewSet):
         
         try:
             session = AttendanceSession.objects.get(id=session_id)
-        except AttendanceSession.DoesNotExist:
+        except (AttendanceSession.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Attendance session not found.')},
                 status=status.HTTP_404_NOT_FOUND
@@ -520,7 +520,7 @@ class FaceRecognitionViewSet(viewsets.ViewSet):
         
         try:
             session = AttendanceSession.objects.get(id=session_id)
-        except AttendanceSession.DoesNotExist:
+        except (AttendanceSession.DoesNotExist, ValueError, TypeError):
             return Response(
                 {'error': _('Attendance session not found.')},
                 status=status.HTTP_404_NOT_FOUND
@@ -619,6 +619,20 @@ class AIConfigurationViewSet(viewsets.ViewSet):
             self.permission_denied(request)
         super().check_permissions(request)
     
+    @action(detail=False, methods=['get'], url_path='status')
+    def status(self, request):
+        """
+        Report which AI capabilities are active on this server.
+
+        The frontend calls this on startup to decide whether to show face
+        registration and camera-based check-in at all. Always 200 - an
+        unavailable feature is a valid answer here, not an error.
+        """
+        return Response(
+            get_ai_manager().get_status(),
+            status=status.HTTP_200_OK,
+        )
+
     @action(detail=False, methods=['post'], url_path='set-confidence-threshold')
     def set_confidence_threshold(self, request):
         """Set face recognition confidence threshold."""
@@ -656,11 +670,10 @@ class AIConfigurationViewSet(viewsets.ViewSet):
                 {'message': _('Training data loaded successfully.')},
                 status=status.HTTP_200_OK
             )
-        else:
-            return Response(
-                {'error': _('Failed to load training data.')},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        return Response(
+            {'error': _('Failed to load training data.')},
+            status=status.HTTP_400_BAD_REQUEST
+        )
     
     @action(detail=False, methods=['post'], url_path='save-training-data')
     def save_training_data(self, request):
@@ -671,10 +684,9 @@ class AIConfigurationViewSet(viewsets.ViewSet):
                 {'message': _('Training data saved successfully.')},
                 status=status.HTTP_200_OK
             )
-        else:
-            return Response(
-                {'error': _('Failed to save training data.')},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        return Response(
+            {'error': _('Failed to save training data.')},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 

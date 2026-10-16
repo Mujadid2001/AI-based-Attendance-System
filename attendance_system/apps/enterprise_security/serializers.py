@@ -88,7 +88,13 @@ class SecurityIncidentSerializer(serializers.ModelSerializer):
             'resolution_details', 'resolved_at'
         ]
         read_only_fields = [
-            'id', 'detected_at', 'affected_user_email', 'assigned_to_email'
+            'id', 'detected_at', 'affected_user_email', 'assigned_to_email',
+            # `detected_by` records whether the incident came from the system,
+            # an automated rule, or a human filing it manually. The viewset's
+            # perform_create() sets it from the actual actor, so asking the
+            # client to supply it would be both wrong and a 400 waiting to
+            # happen.
+            'detected_by',
         ]
 
 
