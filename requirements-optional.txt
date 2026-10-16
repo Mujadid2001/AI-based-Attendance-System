@@ -1,17 +1,17 @@
 # =============================================================================
 # OPTIONAL heavy dependencies - NOT required to run the app
 # =============================================================================
-# The backend imports every library below inside a try/except. If they are
-# missing, the app boots normally and the affected endpoints return a clear
-# "feature unavailable" message instead of crashing:
+# Face recognition works WITHOUT anything in this file: `requirements.txt`
+# installs opencv-contrib-python-headless, and the YuNet + SFace ONNX models are
+# downloaded on first use. This file is only for the dlib-based backend, which
+# is more accurate but needs a compiler.
 #
-#   * /api/ai/*            -> 503 "facial recognition library not installed"
-#   * /api/camera/*        -> wireless camera streaming disabled
-#   * voice notifications  -> silently skipped
+# Choose a backend with `backend=` on FacialRecognitionPipeline, or let it
+# auto-detect (it prefers dlib when importable, so existing encodings keep
+# working).
 #
-# Install them only on a machine with a compiler and the right system
-# libraries. On PythonAnywhere the free/shared tiers do not have them, so
-# leave this file alone there.
+# On PythonAnywhere: skip this file entirely. dlib needs cmake and Boost, which
+# shared hosting does not provide.
 #
 #   Ubuntu/Debian prerequisites:
 #       sudo apt-get install -y cmake build-essential libboost-all-dev \
@@ -27,11 +27,6 @@ face_recognition_models==0.3.0
 # 68-point landmark predictor used for face alignment and blink liveness.
 # `pip install dlib` compiles from source and takes 10-20 minutes.
 dlib==19.24.6
-
-# OpenCV for frame grabbing, denoising and illumination normalisation.
-# Needs libGL and libglib2.0 on Linux; use opencv-python-headless instead if
-# you are running without a display.
-opencv-python==4.10.0.84
 
 # Audio I/O for voice-based attendance confirmation.
 # Needs the espeak-ng system package and libsndfile1.

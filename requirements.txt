@@ -18,7 +18,8 @@ djangorestframework==3.14.0
 djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.3.1
 whitenoise==6.9.0
-gunicorn==21.2.0
+# No gunicorn: PythonAnywhere runs the WSGI app under its own uWSGI and needs no
+# application server installed. It would only consume quota.
 
 # --- Configuration ----------------------------------------------------------
 python-decouple==3.8
@@ -55,6 +56,17 @@ Pillow==10.4.0
 numpy==1.26.4
 qrcode==8.0
 openpyxl==3.1.5
+
+# Facial detection + recognition on hosts with no compiler.
+#
+# opencv-contrib provides FaceDetectorYN (YuNet) and FaceRecognizerSF (SFace),
+# which are ONNX models, so face recognition works on PythonAnywhere - unlike
+# face_recognition, which needs dlib and a C++ toolchain. Both are pure
+# prebuilt wheels. The ONNX models themselves (~37 MB) are downloaded on first
+# use into models/ rather than committed; see models/README.md.
+#
+# -headless omits the GUI/Qt bindings, which a server has no use for.
+opencv-contrib-python-headless==4.10.0.84
 
 # --- Misc -------------------------------------------------------------------
 requests==2.32.3

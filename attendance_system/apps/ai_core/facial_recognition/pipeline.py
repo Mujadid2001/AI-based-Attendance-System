@@ -1,5 +1,6 @@
 """Production-grade facial recognition pipeline with intelligent detection."""
 import logging
+import os
 from typing import Optional, Tuple, Dict, Any, List
 
 from .recognizers import FaceRecognitionLibRecognizer
@@ -8,6 +9,7 @@ from .storage import TrainingDataStorage
 from .utils import FaceQualityChecker
 from .preprocessing import ImagePreprocessor
 from .detection_orchestrator import IntelligentDetectionOrchestrator, DetectionConfidenceCalculator
+from .opencv_backend import SFaceRecognizer, YuNetFaceDetector, ensure_models
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,26 @@ except ImportError:
     HAS_FACE_RECOGNITION = False
 
 
+def _default_models_dir():
+    """
+    Where the ONNX models live.
+
+    Read lazily from Django settings when available so the pipeline can be
+    constructed outside a configured Django (tests, scripts).
+    """
+    try:
+        from django.conf import settings
+
+        models_dir = getattr(settings, 'AI_SETTINGS', {}).get('MODELS_DIR')
+        if models_dir:
+            return models_dir
+    except Exception:
+        pass
+    return os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', '..', 'models'
+    )
+
+
 class FacialRecognitionPipeline:
     """Production-grade facial recognition pipeline.
     
@@ -41,7 +63,8 @@ class FacialRecognitionPipeline:
     
     def __init__(self, face_recognizer=None, confidence_threshold: float = 0.70,
                  storage=None, enable_quality_checks: bool = True,
-                 enable_preprocessing: bool = True, encoding_num_jitters: int = 1):
+                 enable_preprocessing: bool = True, encoding_num_jitters: int = 1,
+                 backend: str = 'auto', models_dir: str = None):
         """Initialize pipeline.
         
         Args:
@@ -51,9 +74,14 @@ class FacialRecognitionPipeline:
             enable_quality_checks: Enable image quality validation
             enable_preprocessing: Enable adaptive preprocessing
             encoding_num_jitters: Number of times to resample for encoding (accuracy vs speed)
+            backend: 'auto', 'dlib' (face_recognition) or 'opencv' (YuNet + SFace).
+                'auto' prefers dlib when it is importable, because it is what
+                existing encodings were built with, and falls back to OpenCV.
+            models_dir: Directory holding the OpenCV ONNX models. Defaults to
+                AI_SETTINGS['MODELS_DIR'].
         """
-        if not HAS_FACE_RECOGNITION:
-            raise RuntimeError("face_recognition library not installed")
+        models_dir = models_dir or _default_models_dir()
+        self.backend = self._select_backend(backend, models_dir)
         
         self.confidence_threshold = confidence_threshold
         self.enable_quality_checks = enable_quality_checks
@@ -61,8 +89,22 @@ class FacialRecognitionPipeline:
         self.encoding_num_jitters = encoding_num_jitters
         
         self.storage = storage or TrainingDataStorage()
-        self.face_recognizer = face_recognizer or FaceRecognitionLibRecognizer()
-        self.liveness_detector = BlinkLivenessDetector()
+        
+        if face_recognizer is not None:
+            self.face_recognizer = face_recognizer
+        elif self.backend == 'opencv':
+            self.face_recognizer = SFaceRecognizer(
+                models_dir, detector=YuNetFaceDetector(models_dir)
+            )
+        else:
+            self.face_recognizer = FaceRecognitionLibRecognizer()
+        
+        # Blink liveness needs dlib's 68-point landmark model. On the OpenCV
+        # backend it is unavailable, so keep the attribute for compatibility but
+        # never build it.
+        self.liveness_detector = (
+            BlinkLivenessDetector() if self.backend == 'dlib' else None
+        )
         self.preprocessor = ImagePreprocessor(enable_adaptive_preprocessing=True)
         self.detection_orchestrator = IntelligentDetectionOrchestrator(
             confidence_threshold=confidence_threshold,
@@ -73,7 +115,63 @@ class FacialRecognitionPipeline:
         self.known_encodings = self.storage.known_encodings
         self.known_ids = self.storage.known_ids
         
-        logger.info(f"Pipeline initialized with confidence_threshold={confidence_threshold}")
+        logger.info(
+            "Pipeline initialized (backend=%s, confidence_threshold=%.2f)",
+            self.backend, confidence_threshold,
+        )
+
+    def _select_backend(self, backend: str, models_dir: str) -> str:
+        """
+        Decide which recognition backend to use.
+
+        Raises RuntimeError with an actionable message when neither backend can
+        run, so the API can answer 503 instead of failing obscurely later.
+        """
+        if backend not in ('auto', 'dlib', 'opencv'):
+            raise ValueError(f'Unknown backend {backend!r}')
+
+        if backend in ('auto', 'dlib') and HAS_FACE_RECOGNITION:
+            return 'dlib'
+
+        if backend == 'dlib':
+            raise RuntimeError(
+                "backend='dlib' was requested but the face_recognition library "
+                "is not installed. It needs dlib, which requires a compiler; "
+                "use backend='opencv' instead."
+            )
+
+        # Either 'auto' with no dlib, or an explicit request for OpenCV.
+        if not ensure_models(models_dir):
+            raise RuntimeError(
+                'OpenCV face models are not available. Expected '
+                f'face_detection_yunet_2023mar.onnx and '
+                f'face_recognition_sface_2021dec.onnx in {models_dir}, and '
+                'opencv-contrib-python-headless installed. They are downloaded '
+                'on first use; if that failed, fetch them manually from '
+                'https://github.com/opencv/opencv_zoo/tree/main/models'
+            )
+
+        return 'opencv'
+
+    @property
+    def liveness_available(self) -> bool:
+        """Whether blink-based liveness detection can run on this backend."""
+        return self.liveness_detector is not None
+
+    @property
+    def default_distance_threshold(self) -> float:
+        """
+        Distance threshold appropriate for the active backend.
+
+        dlib and SFace use different embedding spaces, so the same numeric
+        threshold means different strictness. Callers that do not pass one get
+        the right value from here.
+        """
+        return getattr(
+            self.face_recognizer,
+            'default_distance_threshold',
+            0.6,
+        )
     
     def _detect_face(self, image: "np.ndarray") -> Tuple[bool, Optional[Tuple], Dict]:
         """Detect a single face using intelligent orchestration.
@@ -84,6 +182,9 @@ class FacialRecognitionPipeline:
         Returns:
             Tuple of (success, face_location, metadata)
         """
+        if self.backend == 'opencv':
+            return self._detect_face_opencv(image)
+        
         try:
             preprocessing_metadata = None
             working_image = image.copy()
@@ -112,7 +213,46 @@ class FacialRecognitionPipeline:
         except Exception as e:
             logger.error(f"Detection error: {e}")
             return False, None, {'error': str(e)}
-    
+
+    def _detect_face_opencv(self, image: "np.ndarray") -> Tuple[bool, Optional[Tuple], Dict]:
+        """
+        Detect a single face with YuNet.
+
+        The confidence orchestrator is dlib-based (its 'cnn' and 'hog' methods
+        call face_recognition, and its scoring heuristics assume dlib landmarks),
+        so it is bypassed here. YuNet already returns a calibrated per-face
+        score, which is what the orchestrator would have estimated anyway.
+        """
+        try:
+            detector = YuNetFaceDetector(
+                getattr(self.face_recognizer, 'models_dir', None) or _default_models_dir()
+            )
+            row = detector.best_face_row(image)
+            if row is None:
+                return False, None, {'reason': 'no_face_detected'}
+
+            x, y, w, h = (float(v) for v in row[:4])
+            score = float(row[14])
+
+            if score < self.confidence_threshold:
+                logger.warning(
+                    'YuNet detection score %.2f below threshold %.2f',
+                    score, self.confidence_threshold,
+                )
+                return False, None, {
+                    'reason': 'insufficient_confidence',
+                    'confidence': score,
+                }
+
+            # face_recognition's (top, right, bottom, left) convention.
+            return True, (int(y), int(x + w), int(y + h), int(x)), {
+                'confidence': score,
+                'method': 'yunet',
+            }
+        except Exception as e:
+            logger.error(f'YuNet detection error: {e}')
+            return False, None, {'error': str(e)}
+
     def _extract_encoding(self, image: "np.ndarray", face_location: Tuple) -> Optional["np.ndarray"]:
         """Extract face encoding from detected face.
         
@@ -123,6 +263,13 @@ class FacialRecognitionPipeline:
         Returns:
             128-dimensional encoding or None
         """
+        if self.backend == 'opencv':
+            try:
+                return self.face_recognizer.get_face_encoding(image, [face_location])
+            except Exception as e:
+                logger.error(f'SFace encoding extraction failed: {e}')
+                return None
+        
         try:
             rgb_image = np.array(image)
             if len(image.shape) == 3 and image.shape[2] == 3:
@@ -166,15 +313,21 @@ class FacialRecognitionPipeline:
         """
         try:
             if self.enable_quality_checks:
-                is_acceptable, quality_msg = FaceQualityChecker.check_image_suitability(image)
-                if not is_acceptable:
+                # FaceQualityChecker.check_image_suitability() never existed;
+                # the real entry point is check_all(), which returns a dict.
+                # Calling the missing name raised AttributeError, so every
+                # registration attempt failed with "error" - on every backend.
+                quality = FaceQualityChecker.check_all(image)
+                if not quality.get('overall_pass', True):
+                    reasons = '; '.join(quality.get('messages') or ['unusable image'])
                     metadata = {
                         'processing_method': 'quality_check_failed',
                         'attempt_used': 0,
-                        'quality_issue': quality_msg,
+                        'quality_issue': reasons,
+                        'quality_checks': quality.get('checks', {}),
                         'attempts_log': []
                     }
-                    return False, None, f"Image quality issue: {quality_msg}", metadata
+                    return False, None, f"Image quality issue: {reasons}", metadata
             
             success, face_location, detection_metadata = self._detect_face(image)
             if not success:
@@ -225,18 +378,36 @@ class FacialRecognitionPipeline:
             }
             return False, None, str(e), metadata
     
-    def recognize_face(self, image: "np.ndarray", distance_threshold: float = 0.6,
+    def _face_distances(self, known_encodings, candidate) -> "np.ndarray":
+        """
+        Distance from `candidate` to every known encoding, on the active backend.
+
+        face_recognition exposes face_distance(); SFaceRecognizer implements
+        the same contract, so swapping backends does not change the calling
+        code.
+        """
+        if self.backend == 'opencv':
+            return self.face_recognizer.distance(known_encodings, candidate)
+        return face_recognition.face_distance(known_encodings, candidate)
+
+    def recognize_face(self, image: "np.ndarray", distance_threshold: float = None,
                       return_all_matches: bool = False) -> Dict[str, Any]:
         """Recognize a face in an image.
         
         Args:
             image: Input image (BGR)
-            distance_threshold: Maximum distance for positive match (lower = stricter)
+            distance_threshold: Maximum distance for a positive match (lower =
+                stricter). Leave as None to use the active backend's own
+                threshold - dlib and SFace embeddings live in different spaces,
+                so the same number means different strictness.
             return_all_matches: Whether to return all matches or just best
             
         Returns:
             Recognition result dict with 'success' key
         """
+        if distance_threshold is None:
+            distance_threshold = self.default_distance_threshold
+        
         try:
             success, face_location, detection_metadata = self._detect_face(image)
             if not success:
@@ -271,7 +442,7 @@ class FacialRecognitionPipeline:
             known_encodings_list = list(self.storage.known_encodings.values())
             known_ids_list = list(self.storage.known_encodings.keys())
             
-            distances = face_recognition.face_distance(known_encodings_list, encoding)
+            distances = self._face_distances(known_encodings_list, encoding)
             
             # Find best match
             best_match_index = np.argmin(distances) if len(distances) > 0 else -1

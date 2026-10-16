@@ -2,8 +2,14 @@
 AI Core and Application-specific settings.
 Used by both development and production environments.
 """
+import logging
 import os
+
+from decouple import config
+
 from .base import BASE_DIR, PROJECT_ROOT
+
+logger = logging.getLogger(__name__)
 
 # AI Core settings
 AI_SETTINGS = {
@@ -14,6 +20,17 @@ AI_SETTINGS = {
     'MAX_FACE_SIZE': (500, 500),
     'MODELS_DIR': os.path.join(PROJECT_ROOT, 'models'),
     'TRAINING_DATA_DIR': os.path.join(BASE_DIR, 'media', 'training_data'),
+
+    # How different two faces may be and still count as the same person, as a
+    # Euclidean distance over L2-normalised embeddings.
+    #
+    # The default suits the SFace/OpenCV backend (its published cosine
+    # threshold of 0.363 is 1.13 in these terms). The dlib backend used 0.6.
+    # Because the right value depends on your actual roster - lighting,
+    # camera angle, how similar people look - it is configurable rather than
+    # hard-coded. Raise it to reject near-misses more aggressively; lower it
+    # if genuine matches are being refused.
+    'FACE_MATCH_THRESHOLD': config('FACE_MATCH_THRESHOLD', default='1.13', cast=float),
 }
 
 # Attendance settings

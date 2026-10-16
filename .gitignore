@@ -65,6 +65,26 @@ attendance_system/staticfiles/
 attendance_system/media/
 
 # =============================================================================
+# Runtime AI assets
+# =============================================================================
+# models/shape_predictor_68_face_landmarks.dat  - 96 MB. Too large for git, and
+#   useless where dlib is not installed (which is everywhere on PythonAnywhere).
+#   Download it manually if you want local face alignment - see models/README.md.
+# models/face_encodings.pkl  - cached 128-dimension face encodings, i.e.
+#   BIOMETRIC DATA. Never belongs in version control, and certainly not in a
+#   public repository. The app regenerates it.
+models/*
+!models/README.md
+
+# =============================================================================
+# PythonAnywhere disk quota
+# =============================================================================
+# The shared/free tiers cap /home/<username> at 512 MB, which a virtualenv plus
+# a git checkout can exhaust on its own. Install with --no-cache-dir and purge
+# ~/.cache/pip if you hit "Disk quota exceeded".
+.venv/
+
+# =============================================================================
 # Logs
 # =============================================================================
 logs/

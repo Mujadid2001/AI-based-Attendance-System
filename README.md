@@ -107,22 +107,45 @@ for staff use only.
 
 ## Facial recognition
 
-`dlib`, `face-recognition` and OpenCV are **optional**. Without them the app
-boots normally and the affected endpoints return `503` with a clear message
-instead of crashing. Ask the frontend what is available:
+**Works on PythonAnywhere.** It runs on OpenCV's ONNX models rather than dlib:
+
+| Component | Model | Size |
+|---|---|---|
+| Detection | YuNet | 0.2 MB |
+| Recognition | SFace (128-d embedding) | 37 MB |
+
+`requirements.txt` installs `opencv-contrib-python-headless`, which is a
+prebuilt wheel - **no compiler needed**, unlike `dlib`. The two ONNX models
+download automatically into `models/` on first use (~37 MB).
 
 ```bash
-curl -H "Authorization: Bearer $TOKEN" https://mujadid.pythonanywhere.com/api/ai/configuration/status/
+curl -H "Authorization: Bearer $TOKEN" \
+  https://mujadid.pythonanywhere.com/api/ai/configuration/status/
 ```
 
 ```json
 {
-  "facial_recognition": {"available": false, "reason": "...", "threshold": null},
+  "facial_recognition": {
+    "available": true,
+    "backend": "opencv",
+    "reason": null,
+    "threshold": 0.7,
+    "match_distance_threshold": 1.13,
+    "liveness_available": false
+  },
   "voice_notifications": {"available": false}
 }
 ```
 
-To enable it on a machine with a compiler:
+`backend` is `opencv` or `dlib`. The pipeline prefers dlib when it is
+importable, so a local install that has dlib keeps using it. **Switching
+backends invalidates existing face encodings** - dlib and SFace produce
+different vectors - so faces must be re-registered after a switch.
+
+`liveness_available: false` is expected on the OpenCV backend: blink-based
+anti-spoofing needs dlib's 68-point landmark model, which needs a compiler.
+
+To use the dlib backend locally instead:
 
 ```bash
 sudo apt-get install -y cmake build-essential libboost-all-dev \
@@ -130,8 +153,8 @@ sudo apt-get install -y cmake build-essential libboost-all-dev \
 pip install -r requirements-optional.txt
 ```
 
-PythonAnywhere's shared and free tiers cannot install these, so expect
-`available: false` there.
+Tune matching strictness with `FACE_MATCH_THRESHOLD` in `.env` (lower is
+stricter). See [`models/README.md`](models/README.md) for the model files.
 
 ---
 

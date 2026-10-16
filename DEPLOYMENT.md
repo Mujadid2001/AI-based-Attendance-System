@@ -252,12 +252,53 @@ breaks:
 | Redis cache | in-process `LocMemCache` | `USE_REDIS=False` |
 | WebSockets | in-process channel layer | `USE_REDIS=False` |
 | Celery tasks | run inline in the request | `CELERY_TASK_ALWAYS_EAGER=True` |
-| Facial recognition | endpoints return `503` | install `requirements-optional.txt` |
+| Facial recognition | works: OpenCV YuNet + SFace, all in `requirements.txt` | needs no compiler |
+| Blink liveness (`liveness_available`) | `false` - needs dlib's 96 MB landmark model | install `requirements-optional.txt` |
 | `psutil` metrics | `/api/security/health/` omits them | install `psutil` |
+
+Check what is actually available at any time:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  https://mujadid.pythonanywhere.com/api/ai/configuration/status/
+```
 
 `task.delay()` still works with eager mode - the task just runs before the
 response returns. Report generation and reminder emails keep working; they
 are simply not backgrounded.
+
+### Disk quota is the real constraint
+
+PythonAnywhere's shared and free tiers cap `/home/<username>` at **512 MB**,
+and that covers the virtualenv, the git checkout, `staticfiles/`, uploaded
+media **and pip's cache**. A measured install:
+
+| Item | Size |
+|---|---|
+| `.venv` (`requirements.txt`) | ~377 MB |
+| YuNet + SFace ONNX models | 37 MB |
+| `staticfiles/` | 11 MB |
+| `.git`, `db.sqlite3` | 4 MB |
+| **Total** | **~429 MB of 512 MB** |
+
+That leaves roughly 80 MB, and uploaded face photos in `media/` grow into it.
+Two things to do, and one to avoid:
+
+```bash
+# 1. ALWAYS install without the pip cache - it reached 152 MB on a test machine
+pip install --no-cache-dir -r requirements.txt
+pip cache purge
+
+# 2. Clone shallow, so the old 99 MB landmark blob is not fetched into history
+git clone --depth 1 https://github.com/Mujadid2001/AI-based-Attendance-System.git
+
+# 3. Check what you are using
+du -sh ~/.venv models attendance_system/staticfiles ~/.cache/pip 2>/dev/null
+df -h ~
+```
+
+If you need more room, the 512 MB cap only applies to the shared tiers - a paid
+plan lifts it.
 
 Ask the frontend to call `GET /api/ai/configuration/status/` on startup. It
 always returns 200 and tells the UI which AI features to show:

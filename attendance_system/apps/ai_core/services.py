@@ -111,9 +111,12 @@ class AIServiceManager:
                 'Facial recognition pipeline unavailable: %s', e
             )
             raise AIFeatureUnavailable(
-                'Facial recognition is not available on this server. '
-                'Install the optional dependencies with '
-                '"pip install -r requirements-optional.txt".',
+                'Facial recognition is not available on this server. The '
+                'OpenCV backend needs opencv-contrib-python-headless plus its '
+                'YuNet and SFace ONNX models in models/, which download '
+                'automatically on first use. If they are missing, see '
+                'models/README.md. The underlying error is included as '
+                '"detail".',
                 reason=str(e),
             ) from e
 
@@ -138,12 +141,24 @@ class AIServiceManager:
     def get_status(self):
         """Machine-readable capability report for the frontend / health checks."""
         available = self.is_facial_recognition_available()
-        self._ensure_voice_initialized()
+        pipeline = self._pipeline
+
+        liveness_available = (
+            pipeline.liveness_available
+            if available and hasattr(pipeline, 'liveness_available')
+            else False
+        )
+
         return {
             'facial_recognition': {
                 'available': available,
+                'backend': getattr(pipeline, 'backend', None) if available else None,
                 'reason': str(self._pipeline_error) if self._pipeline_error else None,
-                'threshold': getattr(self._pipeline, 'confidence_threshold', None),
+                'threshold': getattr(pipeline, 'confidence_threshold', None),
+                'match_distance_threshold': (
+                    pipeline.default_distance_threshold if available else None
+                ),
+                'liveness_available': liveness_available,
             },
             'voice_notifications': {
                 'available': self._voice_notifier is not None,
