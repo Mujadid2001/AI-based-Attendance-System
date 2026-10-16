@@ -8,8 +8,11 @@ from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 
-# Use environment variable to switch between dev and prod
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.development')
+# Use the configured settings module, falling back to development locally.
+os.environ.setdefault(
+    'DJANGO_SETTINGS_MODULE',
+    os.getenv('DJANGO_SETTINGS_MODULE', 'config.settings.development'),
+)
 
 # Initialize Django ASGI application early to ensure apps are loaded
 django_asgi_app = get_asgi_application()

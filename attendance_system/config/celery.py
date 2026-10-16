@@ -8,8 +8,12 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
-# Set the default Django settings module
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings.development')
+# Respect the deployment's configured settings module and keep development as
+# the local fallback.
+os.environ.setdefault(
+    'DJANGO_SETTINGS_MODULE',
+    os.getenv('DJANGO_SETTINGS_MODULE', 'config.settings.development'),
+)
 
 # Create Celery app
 app = Celery('attendance_system')
