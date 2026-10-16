@@ -303,7 +303,42 @@ overwrites your secrets.
 
 ---
 
-## 12. Local development
+## 12. The frontend is a separate repository
+
+The React app is **not** in this repository. It lives at:
+
+    https://github.com/Mujadid2001/ai-attendance-frontend
+
+Deploy it to Vercel independently of the API — pushing to one repo does not
+rebuild the other. The only contract between them is `VITE_API_URL`.
+
+### After the frontend is live
+
+Vercel assigns an origin such as `https://ai-attendance-frontend.vercel.app`.
+Put that **exact** origin into `.env` on the PythonAnywhere server:
+
+```
+CORS_ALLOWED_ORIGINS=https://ai-attendance-frontend.vercel.app
+CSRF_TRUSTED_ORIGINS=https://ai-attendance-frontend.vercel.app
+FRONTEND_URL=https://ai-attendance-frontend.vercel.app
+```
+
+Then reload the web app. Skip this and the browser blocks every API call with
+a CORS error, and password-reset emails link back to `localhost:3000`.
+
+### Working on both locally
+
+```bash
+git clone git@github.com:Mujadid2001/AI-based-Attendance-System.git
+git clone git@github.com/Mujadid2001/ai-attendance-frontend.git
+```
+
+Run the API on `:8000` and the frontend on `:3000`; the frontend's
+`.env.development` already points at `http://localhost:8000/api`.
+
+---
+
+## 13. Local development
 
 ```bash
 cd AI-based-Attendance-System
