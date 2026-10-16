@@ -18,7 +18,6 @@ const AttendanceSessionDetail = () => {
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFaceRecognition, setShowFaceRecognition] = useState(false);
-  const [isCapturing, setIsCapturing] = useState(false);
   const [capturedImages, setCapturedImages] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const webcamRef = useRef<Webcam>(null);
@@ -459,7 +458,7 @@ const AttendanceSessionDetail = () => {
                         <div className="flex space-x-2">
                           <Button 
                             size="sm" 
-                            variant="success" 
+                            variant="primary" 
                             onClick={() => handleMarkAttendance(studentId, 'present')}
                             title="Mark as Present"
                           >
@@ -475,7 +474,7 @@ const AttendanceSessionDetail = () => {
                           </Button>
                           <Button 
                             size="sm" 
-                            variant="warning" 
+                            variant="secondary" 
                             onClick={() => handleMarkAttendance(studentId, 'leave')}
                             title="Mark as On Leave"
                           >

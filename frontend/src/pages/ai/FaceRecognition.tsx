@@ -20,7 +20,7 @@ const FaceRecognition = () => {
   const [selectedMobileCamera, setSelectedMobileCamera] = useState<ExternalCamera | null>(null)
   const [showQRModal, setShowQRModal] = useState(false)
   const [mobileFrameUrl, setMobileFrameUrl] = useState<string | null>(null)
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const websocketRef = useRef<WebSocket | null>(null)
   const [useWebSocket, setUseWebSocket] = useState(true) // Prefer WebSocket over polling
   const lastErrorMessageRef = useRef<string>('')
@@ -291,7 +291,7 @@ const FaceRecognition = () => {
     // Only allow laptop-initiated capture for webcam source
     // For mobile camera, recognition is triggered from the mobile device
     if (cameraSource === 'mobile') {
-      toast.info('📱 Please use the Capture button on your mobile device')
+      toast('Please use the Capture button on your mobile device')
       return
     }
 

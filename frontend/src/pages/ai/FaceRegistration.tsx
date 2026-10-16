@@ -162,7 +162,7 @@ const FaceRegistration = () => {
     }
 
     setIsProcessing(true)
-    const loadingToast = toast.loading('Processing and checking for duplicates... This may take a moment')
+    toast.loading('Processing and checking for duplicates... This may take a moment')
 
     try {
       // Convert base64 images to files

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Card, Button, LoadingSpinner, Input } from '@components/ui';
+import { Card, Button, Input } from '@components/ui';
 import { IoBarChart, IoFilter, IoDownload } from 'react-icons/io5';
 import { attendanceService, courseService } from '@services/index';
 import type { Course, AttendanceReport } from '@/types';
@@ -13,7 +12,6 @@ const Reports = () => {
   const [endDate, setEndDate] = useState('');
   const [reportData, setReportData] = useState<AttendanceReport[]>([]);
   const [loading, setLoading] = useState(false);
-  const [loadingCourses, setLoadingCourses] = useState(true);
 
   useEffect(() => {
     fetchCourses();
@@ -26,7 +24,6 @@ const Reports = () => {
     } catch (error) {
       toast.error('Failed to load courses.');
     } finally {
-      setLoadingCourses(false);
     }
   };
 
@@ -51,7 +48,7 @@ const Reports = () => {
       setReportData(reportRes);
       
       if (reportRes.length === 0) {
-        toast.info('No attendance sessions found for the selected period.');
+        toast('No attendance sessions found for the selected period.');
       } else {
         toast.success(`Report generated successfully! Found ${reportRes.length} session(s).`);
       }
@@ -121,7 +118,7 @@ const Reports = () => {
             onChange={(e) => setEndDate(e.target.value)}
           />
           <div className="self-end">
-            <Button onClick={handleGenerateReport} loading={loading}>
+            <Button onClick={handleGenerateReport} isLoading={loading}>
               <IoFilter className="w-5 h-5 mr-2" />
               Generate Report
             </Button>

@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Card, Button, Input, LoadingSpinner } from '@components/ui';
 import { courseService } from '@services/index';
-import type { Course } from '@/types';
 import toast from 'react-hot-toast';
 
 const EditCourse = () => {
@@ -169,7 +168,7 @@ const EditCourse = () => {
             </label>
           </div>
           <div className="flex justify-end">
-            <Button type="submit" loading={isSubmitting}>
+            <Button type="submit" isLoading={isSubmitting}>
               Update Course
             </Button>
           </div>

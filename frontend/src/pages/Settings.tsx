@@ -67,7 +67,7 @@ const Settings = () => {
             onChange={handlePasswordChange}
             required
           />
-          <Button type="submit" loading={isSubmitting}>
+          <Button type="submit" isLoading={isSubmitting}>
             Change Password
           </Button>
         </form>

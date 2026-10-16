@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Card, Button, Input, LoadingSpinner } from '@components/ui';
 import { studentService } from '@services/index';
-import type { StudentProfile } from '@/types';
 import toast from 'react-hot-toast';
 
 const EditStudent = () => {
@@ -134,7 +133,7 @@ const EditStudent = () => {
             />
           </div>
           <div className="flex justify-end">
-            <Button type="submit" loading={loading}>
+            <Button type="submit" isLoading={loading}>
               Update Student
             </Button>
           </div>

@@ -161,7 +161,7 @@ const AddStudent = () => {
             />
           </div>
           <div className="flex justify-end">
-            <Button type="submit" loading={loading}>
+            <Button type="submit" isLoading={loading}>
               Add Student
             </Button>
           </div>

@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { 
   IoCamera, IoAdd, IoQrCode, IoTrash, IoToggle, 
-  IoCheckmarkCircle, IoCloseCircle, IoPhonePortrait,
-  IoDesktop, IoTabletPortrait, IoEllipsisHorizontal
+  IoCheckmarkCircle, IoCloseCircle
 } from 'react-icons/io5'
 import { Card, Button, Badge, Modal } from '@components/ui'
 import { cameraService, ExternalCamera } from '@services/index'
@@ -127,10 +126,10 @@ const ExternalCameras = () => {
   }
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, 'success' | 'warning' | 'error'> = {
+    const variants: Record<string, 'success' | 'warning' | 'danger'> = {
       active: 'success',
       inactive: 'warning',
-      disconnected: 'error'
+      disconnected: 'danger'
     }
     return <Badge variant={variants[status] || 'warning'}>{status}</Badge>
   }
@@ -328,7 +327,10 @@ const ExternalCameras = () => {
             </label>
             <select
               value={formData.device_type || 'mobile'}
-              onChange={(e) => setFormData({ ...formData, device_type: e.target.value })}
+              onChange={(e) => setFormData({
+                ...formData,
+                device_type: e.target.value as typeof formData.device_type,
+              })}
               className="input"
               required
             >

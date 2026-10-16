@@ -315,7 +315,7 @@ const CourseDetail = () => {
               {course.instructor && (
                 <div className="flex items-center">
                   <IoPersonAdd className="w-4 h-4 mr-2" />
-                  Instructor: {course.instructor.first_name} {course.instructor.last_name}
+                  Instructor: {course.instructor_name || course.instructor}
                 </div>
               )}
             </div>

@@ -38,6 +38,7 @@ export interface AuthTokens {
 export interface AuthResponse {
   user: User
   tokens: AuthTokens
+  requires_approval?: boolean
 }
 
 // Student Types
@@ -142,6 +143,10 @@ export interface FaceRecognitionResult {
   confidence: number
   recognized: boolean
   message: string
+  student?: {
+    name?: string
+    roll_number?: string
+  }
 }
 
 // Report Types

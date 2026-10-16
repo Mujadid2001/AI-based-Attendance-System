@@ -22,6 +22,7 @@ const Profile = () => {
   const fetchStudentProfile = async () => {
     setLoading(true)
     try {
+      if (user?.student_id === undefined) return
       const profile = await studentService.getStudent(user.student_id)
       setStudentProfile(profile)
     } catch (error) {

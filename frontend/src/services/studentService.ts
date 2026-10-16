@@ -1,5 +1,12 @@
 import api from './api'
-import type { StudentProfile, PaginatedResponse } from '@/types'
+import type { StudentProfile, PaginatedResponse, User } from '@/types'
+
+export interface UpdateStudentData {
+  user?: Partial<User>
+  roll_number?: string
+  department?: string
+  semester?: number
+}
 
 export const studentService = {
   // Get all students
@@ -34,7 +41,7 @@ export const studentService = {
   },
 
   // Update student
-  updateStudent: async (id: number, data: Partial<StudentProfile>): Promise<StudentProfile> => {
+  updateStudent: async (id: number, data: UpdateStudentData): Promise<StudentProfile> => {
     const response = await api.patch<StudentProfile>(`/students/profiles/${id}/`, data)
     return response.data
   },

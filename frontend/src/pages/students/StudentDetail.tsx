@@ -31,7 +31,7 @@ const StudentDetail = () => {
       try {
         const enrollmentsData = await courseService.getStudentEnrollments(parseInt(id, 10));
         // Handle paginated response
-        const enrollmentsList = Array.isArray(enrollmentsData) ? enrollmentsData : enrollmentsData.results || [];
+        const enrollmentsList = enrollmentsData;
         setEnrollments(enrollmentsList);
         
         // Fetch course details for each enrollment
